@@ -117,7 +117,7 @@ CREATE POLICY "Users can only see own metadata" ON image_metadata
   FOR ALL USING (auth.uid() = user_id);
 
 -----------------------------------------------------------
-⚙️ SETUP WORKFLOW (Day-by-Day)
+⚙️ SETUP WORKFLOW
 -----------------------------------------------------------
 
 🐘 Supabase Setup
