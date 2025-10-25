@@ -15,37 +15,53 @@ Build a full-stack AI-powered Image Gallery web app that allows users to:
 -----------------------------------------------------------
 
 ai-image-gallery/
-├── frontend/                  # React + Vite (Vercel)
+├── frontend/                     # React + Vite (Vercel)
 │   ├── src/
-│   │   ├── components/        # GalleryGrid, ImageModal, UploadZone
-│   │   ├── pages/             # Auth, Gallery, Upload
-│   │   ├── hooks/             # useAuth, useUpload, useSearch
-│   │   ├── services/          # axios API clients
-│   │   ├── supabaseClient.js  # Supabase setup
+│   │   ├── components/           # GalleryGrid, ImageModal, UploadZone
+│   │   ├── pages/                # Auth, Gallery, Upload
+│   │   ├── hooks/                # useAuth, useUpload, useSearch
+│   │   ├── services/             # axios API clients
+│   │   ├── supabaseClient.js     # Supabase setup
 │   │   ├── App.jsx
-│   │   └── main.jsx
+│   │   ├── main.jsx
+│   │   └── __tests__/            # Frontend unit + integration tests
+│   │       ├── components/
+│   │       │   └── GalleryGrid.test.jsx
+│   │       ├── hooks/
+│   │       │   └── useUpload.test.jsx
+│   │       └── pages/
+│   │           └── Gallery.test.jsx
+│   ├── vitest.config.js          # Vitest config for testing
 │   ├── .env
 │   └── package.json
 │
-├── backend/                   # Express.js (Railway/Render)
+├── backend/                      # Express.js (Railway/Render)
 │   ├── src/
 │   │   ├── routes/
-│   │   │   ├── auth.js        # Auth routes (login/logout)
-│   │   │   ├── images.js      # Upload/list/search images
-│   │   │   └── ai.js          # AI tagging/descriptions
+│   │   │   ├── auth.js
+│   │   │   ├── images.js
+│   │   │   └── ai.js
 │   │   ├── services/
-│   │   │   ├── supabaseClient.js   # DB + Storage
-│   │   │   ├── openaiService.js    # AI processing (OpenAI API)
-│   │   │   └── prismaClient.js     # ORM (Supabase PostgreSQL)
+│   │   │   ├── supabaseClient.js
+│   │   │   ├── openaiService.js
+│   │   │   └── prismaClient.js
 │   │   ├── utils/
-│   │   │   ├── imageProcessor.js   # Resize, thumbnail (sharp)
-│   │   │   ├── colorExtractor.js   # Extract dominant colors
-│   │   │   └── errorHandler.js     # Centralized error handling
+│   │   │   ├── imageProcessor.js
+│   │   │   ├── colorExtractor.js
+│   │   │   └── errorHandler.js
 │   │   ├── app.js
-│   │   └── server.js
+│   │   ├── server.js
+│   │   └── __tests__/            # Backend unit + integration tests
+│   │       ├── routes/
+│   │       │   └── images.test.js
+│   │       ├── services/
+│   │       │   └── openaiService.test.js
+│   │       └── utils/
+│   │           └── imageProcessor.test.js
 │   ├── prisma/
 │   │   └── schema.prisma
 │   ├── .env
+│   ├── jest.config.js
 │   └── package.json
 │
 └── README.md
@@ -104,33 +120,33 @@ CREATE POLICY "Users can only see own metadata" ON image_metadata
 ⚙️ SETUP WORKFLOW (Day-by-Day)
 -----------------------------------------------------------
 
-🗓️ Day 1 — Supabase Setup
+🐘 Supabase Setup
 - Create project
 - Enable Auth & Storage
 - Run SQL schema (images + image_metadata)
 - Save API keys in .env
 
-🗓️ Day 2 — Backend Setup (Express)
+🧩 Backend Setup (Express)
 - npm init
-- Install deps: express, dotenv, axios, cors, openai, @prisma/client, sharp, color-thief-node, supabase-js
+- Install deps: express, dotenv, axios, cors, openai, @prisma/client, multer, sharp, color-thief-node, supabase-js
 - Configure Supabase client + Prisma
 - Implement image upload and thumbnail generator
 - Add OpenAI tagging route
 
-🗓️ Day 3 — Frontend Setup (React + Vite)
+⚛️ Frontend Setup (React + Vite)
 - npm create vite@latest frontend --template react
 - npm install @supabase/supabase-js axios react-router-dom tailwindcss
 - Add Supabase Auth (login/signup)
 - Create upload and gallery pages
 - Connect to backend API
 
-🗓️ Day 4 — Integration & Testing
+🧪 Integration & Testing
 - Test end-to-end upload → AI processing → Gallery view
 - Implement search + filter by color
 - Validate RLS and secure API keys
 - Add loading/error states
 
-🗓️ Day 5 — Deployment
+🚀 Deployment
 - Deploy frontend (Vercel)
 - Deploy backend (Railway/Render)
 - Configure environment variables securely
@@ -144,4 +160,4 @@ CREATE POLICY "Users can only see own metadata" ON image_metadata
 - Enable HTTPS for deployed endpoints
 - Sanitize uploads (check MIME type, size)
 - Restrict CORS to Vercel domain only
-- Handle AI + Supabase API errors gracefully
+- Handle AI + Supabase API errors

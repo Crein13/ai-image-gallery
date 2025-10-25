@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model images {
+  id             Int              @id @default(autoincrement())
+  user_id        String           @db.Uuid
+  filename       String?          @db.VarChar(255)
+  original_path  String?
+  thumbnail_path String?
+  uploaded_at    DateTime         @default(now())
+  image_metadata image_metadata[]
+
+  @@map("images")
+}
+
+model image_metadata {
+  id                   Int      @id @default(autoincrement())
+  image_id             Int
+  user_id              String   @db.Uuid
+  description          String?
+  tags                 String[]
+  colors               String[]
+  ai_processing_status String?  @db.VarChar(20)
+  created_at           DateTime @default(now())
+
+  image images @relation(fields: [image_id], references: [id])
+
+  @@map("image_metadata")
+}
