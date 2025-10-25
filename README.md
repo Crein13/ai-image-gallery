@@ -1,6 +1,6 @@
-===========================================================
-🧠 PROJECT CONTEXT — AI Image Gallery (React + Express + Supabase + OpenAI)
-===========================================================
+***
+# 🧠 PROJECT CONTEXT — AI Image Gallery (React + Express + Supabase + OpenAI)
+***
 
 🎯 GOAL:
 Build a full-stack AI-powered Image Gallery web app that allows users to:
