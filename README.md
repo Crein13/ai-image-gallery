@@ -13,7 +13,7 @@ Build a full-stack AI-powered Image Gallery web app that allows users to:
 -----------------------------------------------------------
 🗂️ FOLDER STRUCTURE
 -----------------------------------------------------------
-
+```
 ai-image-gallery/
 ├── frontend/                     # React + Vite (Vercel)
 │   ├── src/
@@ -65,7 +65,7 @@ ai-image-gallery/
 │   └── package.json
 │
 └── README.md
-
+```
 -----------------------------------------------------------
 🧩 TECH STACK
 -----------------------------------------------------------
