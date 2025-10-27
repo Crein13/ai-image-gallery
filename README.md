@@ -212,6 +212,7 @@ BEGIN
   ORDER BY match_score DESC;
 END;
 $$;
+```
 
 -----------------------------------------------------------
 ⚙️ SETUP WORKFLOW
