@@ -19,8 +19,37 @@ router.get('/', verifyToken, async (req, res) => {
     const offset = Number.isFinite(offsetParam) ? offsetParam : 0;
     const sort = req.query.sort === 'oldest' ? 'oldest' : 'newest';
 
-    const payload = await listImages({ userId, limit, offset, sort });
-    return res.status(200).json(payload);
+    const result = await listImages({ userId, limit, offset, sort });
+
+    // Build HATEOAS pagination links
+    const basePath = '/api/images';
+    const buildLink = (newOffset) =>
+      `${basePath}?limit=${result.limit}&offset=${newOffset}&sort=${sort}`;
+
+    const links = {
+      self: buildLink(result.offset),
+    };
+
+    if (result.hasNext) {
+      links.next = buildLink(result.nextOffset);
+    }
+
+    if (result.hasPrev) {
+      links.prev = buildLink(result.prevOffset);
+    }
+
+    // Return HATEOAS-compliant response
+    return res.status(200).json({
+      items: result.items,
+      pagination: {
+        total: result.total,
+        limit: result.limit,
+        offset: result.offset,
+        hasNext: result.hasNext,
+        hasPrev: result.hasPrev,
+        links,
+      },
+    });
   } catch (error) {
     console.error('List images error:', error);
     return res.status(500).json({ error: 'Failed to list images' });

@@ -67,7 +67,22 @@ export async function listImages({ userId, limit = 20, offset = 0, sort = 'newes
     };
   });
 
-  return { items, total, limit: safeLimit, offset: safeOffset };
+  // Compute pagination helpers
+  const hasNext = safeOffset + safeLimit < total;
+  const hasPrev = safeOffset > 0;
+  const nextOffset = hasNext ? safeOffset + safeLimit : null;
+  const prevOffset = hasPrev ? Math.max(0, safeOffset - safeLimit) : null;
+
+  return {
+    items,
+    total,
+    limit: safeLimit,
+    offset: safeOffset,
+    hasNext,
+    hasPrev,
+    nextOffset,
+    prevOffset,
+  };
 }
 
 /**

@@ -95,7 +95,7 @@ describe('imageService.listImages', () => {
     prismaImagesCount.mockResolvedValueOnce(0);
     prismaImagesFindMany.mockResolvedValueOnce([]);
 
-  await listImages({ userId, limit: 999, offset: -5, sort: 'oldest' });
+    await listImages({ userId, limit: 999, offset: -5, sort: 'oldest' });
 
     expect(prismaImagesFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -104,5 +104,65 @@ describe('imageService.listImages', () => {
         orderBy: { uploaded_at: 'asc' },
       })
     );
+  });
+
+  test('computes pagination helpers for middle page', async () => {
+    const { listImages } = imageServiceModule;
+    const userId = 'user-123';
+
+    prismaImagesCount.mockResolvedValueOnce(100);
+    prismaImagesFindMany.mockResolvedValueOnce([]);
+
+    const result = await listImages({ userId, limit: 10, offset: 30, sort: 'newest' });
+
+    expect(result.hasNext).toBe(true);
+    expect(result.hasPrev).toBe(true);
+    expect(result.nextOffset).toBe(40);
+    expect(result.prevOffset).toBe(20);
+  });
+
+  test('computes pagination helpers for first page', async () => {
+    const { listImages } = imageServiceModule;
+    const userId = 'user-123';
+
+    prismaImagesCount.mockResolvedValueOnce(50);
+    prismaImagesFindMany.mockResolvedValueOnce([]);
+
+    const result = await listImages({ userId, limit: 20, offset: 0, sort: 'newest' });
+
+    expect(result.hasPrev).toBe(false);
+    expect(result.prevOffset).toBe(null);
+    expect(result.hasNext).toBe(true);
+    expect(result.nextOffset).toBe(20);
+  });
+
+  test('computes pagination helpers for last page', async () => {
+    const { listImages } = imageServiceModule;
+    const userId = 'user-123';
+
+    prismaImagesCount.mockResolvedValueOnce(25);
+    prismaImagesFindMany.mockResolvedValueOnce([]);
+
+    const result = await listImages({ userId, limit: 20, offset: 20, sort: 'newest' });
+
+    expect(result.hasNext).toBe(false);
+    expect(result.nextOffset).toBe(null);
+    expect(result.hasPrev).toBe(true);
+    expect(result.prevOffset).toBe(0);
+  });
+
+  test('computes pagination helpers for empty results', async () => {
+    const { listImages } = imageServiceModule;
+    const userId = 'user-123';
+
+    prismaImagesCount.mockResolvedValueOnce(0);
+    prismaImagesFindMany.mockResolvedValueOnce([]);
+
+    const result = await listImages({ userId, limit: 20, offset: 0, sort: 'newest' });
+
+    expect(result.hasNext).toBe(false);
+    expect(result.hasPrev).toBe(false);
+    expect(result.nextOffset).toBe(null);
+    expect(result.prevOffset).toBe(null);
   });
 });

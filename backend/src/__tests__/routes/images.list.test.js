@@ -58,7 +58,7 @@ describe('GET /api/images (listing)', () => {
       next();
     });
 
-    const payload = {
+    const serviceResult = {
       items: [
         {
           id: 10,
@@ -81,16 +81,32 @@ describe('GET /api/images (listing)', () => {
       total: 1,
       limit: 20,
       offset: 0,
+      hasNext: false,
+      hasPrev: false,
+      nextOffset: null,
+      prevOffset: null,
     };
 
-    mockListImages.mockResolvedValueOnce(payload);
+    mockListImages.mockResolvedValueOnce(serviceResult);
 
     const res = await request(app)
       .get('/api/images')
       .set('Authorization', 'Bearer token');
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(payload);
+    expect(res.body).toMatchObject({
+      items: serviceResult.items,
+      pagination: {
+        total: 1,
+        limit: 20,
+        offset: 0,
+        hasNext: false,
+        hasPrev: false,
+        links: {
+          self: '/api/images?limit=20&offset=0&sort=newest',
+        },
+      },
+    });
     expect(mockListImages).toHaveBeenCalledWith({
       userId: 'user-123',
       limit: 20,
@@ -105,15 +121,38 @@ describe('GET /api/images (listing)', () => {
       next();
     });
 
-    const payload = { items: [], total: 50, limit: 5, offset: 10 };
-    mockListImages.mockResolvedValueOnce(payload);
+    const serviceResult = {
+      items: [],
+      total: 50,
+      limit: 5,
+      offset: 10,
+      hasNext: true,
+      hasPrev: true,
+      nextOffset: 15,
+      prevOffset: 5,
+    };
+    mockListImages.mockResolvedValueOnce(serviceResult);
 
     const res = await request(app)
       .get('/api/images?limit=5&offset=10&sort=oldest')
       .set('Authorization', 'Bearer token');
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(payload);
+    expect(res.body).toMatchObject({
+      items: [],
+      pagination: {
+        total: 50,
+        limit: 5,
+        offset: 10,
+        hasNext: true,
+        hasPrev: true,
+        links: {
+          self: '/api/images?limit=5&offset=10&sort=oldest',
+          next: '/api/images?limit=5&offset=15&sort=oldest',
+          prev: '/api/images?limit=5&offset=5&sort=oldest',
+        },
+      },
+    });
     expect(mockListImages).toHaveBeenCalledWith({
       userId: 'user-123',
       limit: 5,
@@ -121,4 +160,136 @@ describe('GET /api/images (listing)', () => {
       sort: 'oldest',
     });
   });
+
+  test('includes HATEOAS pagination links when hasNext is true', async () => {
+    mockVerifyToken.mockImplementation((req, _res, next) => {
+      req.user = { id: 'user-123' };
+      next();
+    });
+
+    const servicePayload = {
+      items: [],
+      total: 100,
+      limit: 20,
+      offset: 40,
+      hasNext: true,
+      hasPrev: true,
+      nextOffset: 60,
+      prevOffset: 20,
+    };
+    mockListImages.mockResolvedValueOnce(servicePayload);
+
+    const res = await request(app)
+      .get('/api/images?limit=20&offset=40&sort=newest')
+      .set('Authorization', 'Bearer token');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      items: [],
+      pagination: {
+        total: 100,
+        limit: 20,
+        offset: 40,
+        hasNext: true,
+        hasPrev: true,
+        links: {
+          self: '/api/images?limit=20&offset=40&sort=newest',
+          next: '/api/images?limit=20&offset=60&sort=newest',
+          prev: '/api/images?limit=20&offset=20&sort=newest',
+        },
+      },
+    });
+  });
+
+  test('includes HATEOAS links with only next when hasPrev is false', async () => {
+    mockVerifyToken.mockImplementation((req, _res, next) => {
+      req.user = { id: 'user-123' };
+      next();
+    });
+
+    const servicePayload = {
+      items: [],
+      total: 100,
+      limit: 20,
+      offset: 0,
+      hasNext: true,
+      hasPrev: false,
+      nextOffset: 20,
+      prevOffset: null,
+    };
+    mockListImages.mockResolvedValueOnce(servicePayload);
+
+    const res = await request(app)
+      .get('/api/images?limit=20&offset=0')
+      .set('Authorization', 'Bearer token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.pagination.links).toEqual({
+      self: '/api/images?limit=20&offset=0&sort=newest',
+      next: '/api/images?limit=20&offset=20&sort=newest',
+    });
+    expect(res.body.pagination.links.prev).toBeUndefined();
+  });
+
+  test('includes HATEOAS links with only prev when hasNext is false', async () => {
+    mockVerifyToken.mockImplementation((req, _res, next) => {
+      req.user = { id: 'user-123' };
+      next();
+    });
+
+    const servicePayload = {
+      items: [],
+      total: 50,
+      limit: 20,
+      offset: 40,
+      hasNext: false,
+      hasPrev: true,
+      nextOffset: null,
+      prevOffset: 20,
+    };
+    mockListImages.mockResolvedValueOnce(servicePayload);
+
+    const res = await request(app)
+      .get('/api/images?limit=20&offset=40&sort=oldest')
+      .set('Authorization', 'Bearer token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.pagination.links).toEqual({
+      self: '/api/images?limit=20&offset=40&sort=oldest',
+      prev: '/api/images?limit=20&offset=20&sort=oldest',
+    });
+    expect(res.body.pagination.links.next).toBeUndefined();
+  });
+
+  test('includes only self link when no next or prev', async () => {
+    mockVerifyToken.mockImplementation((req, _res, next) => {
+      req.user = { id: 'user-123' };
+      next();
+    });
+
+    const servicePayload = {
+      items: [],
+      total: 5,
+      limit: 20,
+      offset: 0,
+      hasNext: false,
+      hasPrev: false,
+      nextOffset: null,
+      prevOffset: null,
+    };
+    mockListImages.mockResolvedValueOnce(servicePayload);
+
+    const res = await request(app)
+      .get('/api/images')
+      .set('Authorization', 'Bearer token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.pagination.links).toEqual({
+      self: '/api/images?limit=20&offset=0&sort=newest',
+    });
+    expect(res.body.pagination.links.next).toBeUndefined();
+    expect(res.body.pagination.links.prev).toBeUndefined();
+  });
 });
+
+

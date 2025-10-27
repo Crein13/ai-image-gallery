@@ -4,10 +4,12 @@ import express from 'express';
 
 // Mock dependencies before importing route
 const mockUploadImage = jest.fn();
+const mockListImages = jest.fn();
 const mockProcessImageAI = jest.fn();
 
 jest.unstable_mockModule('../../services/imageService.js', () => ({
   uploadImage: mockUploadImage,
+  listImages: mockListImages,
 }));
 
 jest.unstable_mockModule('../../services/aiProcessingService.js', () => ({
