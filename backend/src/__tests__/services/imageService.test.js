@@ -9,12 +9,7 @@ const prismaMock = {
   images: { create: createMock },
 };
 
-const resizeMock = jest.fn();
-const toBufferMock = jest.fn();
-const sharpMock = jest.fn(() => ({
-  resize: resizeMock,
-  toBuffer: toBufferMock,
-}));
+const generateThumbnailMock = jest.fn();
 
 // Mock Supabase client to simulate storage bucket operations (upload original and thumbnail)
 jest.unstable_mockModule('../../../src/services/supabaseClient.js', () => ({
@@ -29,9 +24,9 @@ jest.unstable_mockModule('../../../src/services/prismaClient.js', () => ({
   prisma: prismaMock,
 }));
 
-// Mock sharp library to simulate image resizing and thumbnail generation
-jest.unstable_mockModule('sharp', () => ({
-  default: sharpMock,
+// Mock imageProcessor utility for thumbnail generation
+jest.unstable_mockModule('../../../src/utils/imageProcessor.js', () => ({
+  generateThumbnail: generateThumbnailMock,
 }));
 
 // Import service after mocks
@@ -48,7 +43,6 @@ describe('imageService - uploadImage', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    resizeMock.mockReturnValue({ toBuffer: toBufferMock });
   });
 
   test('rejects non-image files', async () => {
@@ -67,8 +61,12 @@ describe('imageService - uploadImage', () => {
   });
 
   test('uploads original and thumbnail to Supabase Storage, creates DB record', async () => {
-    // Mock sharp thumbnail generation
-    toBufferMock.mockResolvedValueOnce(Buffer.from('thumbnail-data'));
+    // Mock thumbnail generation
+    generateThumbnailMock.mockResolvedValueOnce({
+      thumbnailBuffer: Buffer.from('thumbnail-data'),
+      width: 300,
+      height: 225,
+    });
 
     // Mock Supabase storage uploads
     uploadMock
@@ -88,10 +86,8 @@ describe('imageService - uploadImage', () => {
 
     const result = await uploadImage(mockFile, userId);
 
-    // Verify sharp was called to create thumbnail
-    expect(sharpMock).toHaveBeenCalledWith(mockFile.buffer);
-    expect(resizeMock).toHaveBeenCalledWith(300, 300, { fit: 'cover' });
-    expect(toBufferMock).toHaveBeenCalled();
+    // Verify generateThumbnail was called
+    expect(generateThumbnailMock).toHaveBeenCalledWith(mockFile.buffer, 300);
 
     // Verify Supabase storage uploads
     expect(fromMock).toHaveBeenCalledWith('images');
@@ -131,20 +127,28 @@ describe('imageService - uploadImage', () => {
   });
 
   test('throws error if Supabase storage upload fails', async () => {
-    toBufferMock.mockResolvedValueOnce(Buffer.from('thumbnail-data'));
+    generateThumbnailMock.mockResolvedValueOnce({
+      thumbnailBuffer: Buffer.from('thumbnail-data'),
+      width: 300,
+      height: 225,
+    });
     uploadMock.mockResolvedValueOnce({ data: null, error: new Error('Storage full') });
 
     await expect(uploadImage(mockFile, userId)).rejects.toThrow('Failed to upload original image');
   });
 
   test('throws error if thumbnail generation fails', async () => {
-    toBufferMock.mockRejectedValueOnce(new Error('Sharp processing failed'));
+    generateThumbnailMock.mockRejectedValueOnce(new Error('Sharp processing failed'));
 
     await expect(uploadImage(mockFile, userId)).rejects.toThrow('Failed to generate thumbnail');
   });
 
   test('throws error if DB insert fails', async () => {
-    toBufferMock.mockResolvedValueOnce(Buffer.from('thumbnail-data'));
+    generateThumbnailMock.mockResolvedValueOnce({
+      thumbnailBuffer: Buffer.from('thumbnail-data'),
+      width: 300,
+      height: 225,
+    });
     uploadMock
       .mockResolvedValueOnce({ data: { path: 'original.jpg' }, error: null })
       .mockResolvedValueOnce({ data: { path: 'thumb.jpg' }, error: null });

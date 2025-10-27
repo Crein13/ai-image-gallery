@@ -3,8 +3,9 @@ import cors from 'cors';
 import 'dotenv/config';
 
 import authRoutes from './routes/auth.js';
-import errorHandler from './middleware/errorHandler.js';
 import { listEndpointsForRouter, printEndpoints } from './utils/routePrinter.js';
+import imageRoutes from './routes/images.js';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 const app = express();
 
@@ -17,13 +18,15 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/images', imageRoutes);
 
 // Log registered routes (dev aid)
 printEndpoints([
   ...listEndpointsForRouter('/api/auth', authRoutes),
 ]);
 
-// Centralized error handler (must be after routes)
+// Error handlers (must be after all routes)
+app.use(notFoundHandler);
 app.use(errorHandler);
 
 export default app;
