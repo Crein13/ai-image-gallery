@@ -24,9 +24,11 @@ jest.unstable_mockModule('../../services/supabaseClient.js', () => ({
 // Mock imageService: listImages for listing, uploadImage to satisfy router imports
 const mockListImages = jest.fn();
 const mockUploadImage = jest.fn();
+const mockGetImageById = jest.fn();
 jest.unstable_mockModule('../../services/imageService.js', () => ({
   listImages: mockListImages,
   uploadImage: mockUploadImage,
+  getImageById: mockGetImageById,
 }));
 
 // Import router after mocks

@@ -5,6 +5,62 @@ import { extractDominantColors } from '../utils/colorExtractor.js';
 import { processImageAI } from './aiProcessingService.js';
 
 /**
+ * Get a single image by ID with metadata
+ * Enforces ownership - only returns image if it belongs to the requesting user
+ *
+ * @param {Object} params
+ * @param {number} params.imageId - ID of the image to retrieve
+ * @param {string} params.userId - ID of the requesting user
+ * @returns {Promise<Object|null>} Image with metadata, or null if not found/not owned
+ */
+export async function getImageById({ imageId, userId }) {
+  const image = await prisma.images.findFirst({
+    where: {
+      id: imageId,
+      user_id: userId,
+    },
+    include: {
+      image_metadata: {
+        select: {
+          description: true,
+          tags: true,
+          colors: true,
+          dominant_color: true,
+          ai_processing_status: true,
+        },
+      },
+    },
+  });
+
+  if (!image) {
+    return null;
+  }
+
+  // Format metadata same way as listImages
+  const md = Array.isArray(image.image_metadata) ? image.image_metadata[0] : null;
+
+  return {
+    id: image.id,
+    user_id: image.user_id,
+    filename: image.filename,
+    original_path: image.original_path,
+    thumbnail_path: image.thumbnail_path,
+    file_size: image.file_size,
+    mime_type: image.mime_type,
+    uploaded_at: image.uploaded_at,
+    metadata: md
+      ? {
+          description: md.description ?? null,
+          tags: md.tags ?? [],
+          colors: md.colors ?? [],
+          dominant_color: md.dominant_color ?? null,
+          ai_processing_status: md.ai_processing_status ?? 'pending',
+        }
+      : null,
+  };
+}
+
+/**
  * List images for a user with pagination and basic sorting
  * No business logic in routes: called by routes/images.js
  *

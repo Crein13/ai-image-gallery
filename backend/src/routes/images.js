@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import { upload } from '../middleware/upload.js';
 import { verifyToken } from '../middleware/auth.js';
-import { uploadImage } from '../services/imageService.js';
-import { listImages } from '../services/imageService.js';
+import { uploadImage, listImages, getImageById } from '../services/imageService.js';
 import { processImageAI } from '../services/aiProcessingService.js';
 import { supabase } from '../services/supabaseClient.js';
 import prisma from '../services/prismaClient.js';
@@ -114,6 +113,30 @@ router.post('/upload', verifyToken, upload.array('images', 5), async (req, res) 
 router.get('/search', async (_req, res) => {
   // TODO: Implement full-text search on description/tags and/or filter by color
   res.status(501).json({ items: [], message: 'Search not implemented yet.' });
+});
+
+// GET /api/images/:id
+router.get('/:id', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const imageId = parseInt(req.params.id, 10);
+
+    // Validate image ID
+    if (!Number.isFinite(imageId) || imageId <= 0) {
+      return res.status(400).json({ error: 'Invalid image ID' });
+    }
+
+    const image = await getImageById({ imageId, userId });
+
+    if (!image) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    return res.status(200).json(image);
+  } catch (error) {
+    console.error('Get image error:', error);
+    return res.status(500).json({ error: 'Failed to retrieve image' });
+  }
 });
 
 // POST /api/images/:imageId/retry-ai
