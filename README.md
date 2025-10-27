@@ -87,131 +87,36 @@ ai-image-gallery/
 -----------------------------------------------------------
 
 ```sql
--- Install pgvector extension for semantic search
-CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS pg_trgm;  -- For fuzzy text search
-
 CREATE TABLE images (
-  id SERIAL PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  filename VARCHAR(255) NOT NULL,
-  original_path TEXT NOT NULL,
-  thumbnail_path TEXT NOT NULL,
-  file_size INTEGER,
-  mime_type VARCHAR(100),
-  uploaded_at TIMESTAMP DEFAULT NOW()
+    id SERIAL PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id),
+    filename VARCHAR(255),
+    original_path TEXT,
+    thumbnail_path TEXT,
+    uploaded_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE image_metadata (
-  id SERIAL PRIMARY KEY,
-  image_id INTEGER REFERENCES images(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-
-  -- AI-generated content
-  description TEXT,
-  tags TEXT[] DEFAULT '{}',
-  colors VARCHAR(7)[] DEFAULT '{}',
-  dominant_color VARCHAR(7),
-
-  -- Semantic search (OpenAI embeddings for "vibe" search)
-  embedding vector(1536),
-
-  -- Processing status
-  ai_processing_status VARCHAR(20) DEFAULT 'pending',
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+    id SERIAL PRIMARY KEY,
+    image_id INTEGER REFERENCES images(id),
+    user_id UUID REFERENCES auth.users(id),
+    description TEXT,
+    tags TEXT[],
+    colors VARCHAR(7)[],
+    ai_processing_status VARCHAR(20),
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Indexes for performance
-CREATE INDEX idx_images_user_id ON images(user_id);
-CREATE INDEX idx_images_uploaded_at ON images(uploaded_at DESC);
-
-CREATE INDEX idx_metadata_user_id ON image_metadata(user_id);
-CREATE INDEX idx_metadata_image_id ON image_metadata(image_id);
-CREATE INDEX idx_metadata_tags_gin ON image_metadata USING GIN(tags);
-CREATE INDEX idx_metadata_colors_gin ON image_metadata USING GIN(colors);
-CREATE INDEX idx_metadata_description_fts ON image_metadata USING GIN(to_tsvector('english', description));
-
--- Vector similarity index for semantic search
-CREATE INDEX idx_metadata_embedding_ivfflat ON image_metadata
-  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-
--- Row Level Security
+-- Enable RLS
 ALTER TABLE images ENABLE ROW LEVEL SECURITY;
 ALTER TABLE image_metadata ENABLE ROW LEVEL SECURITY;
 
+-- RLS Policies
 CREATE POLICY "Users can only see own images" ON images
-  FOR ALL USING (auth.uid() = user_id);
+    FOR ALL USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can only see own metadata" ON image_metadata
-  FOR ALL USING (auth.uid() = user_id);
-
--- Stored procedure for vector search (Google Photos-style semantic search)
-CREATE OR REPLACE FUNCTION vector_search(
-  query_embedding vector(1536),
-  match_threshold float DEFAULT 0.8,
-  match_count int DEFAULT 20,
-  user_filter uuid DEFAULT NULL
-)
-RETURNS TABLE (
-  id int,
-  image_id int,
-  description text,
-  tags text[],
-  similarity float
-)
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT
-    image_metadata.id,
-    image_metadata.image_id,
-    image_metadata.description,
-    image_metadata.tags,
-    1 - (image_metadata.embedding <=> query_embedding) as similarity
-  FROM image_metadata
-  WHERE
-    (user_filter IS NULL OR image_metadata.user_id = user_filter)
-    AND image_metadata.embedding IS NOT NULL
-    AND 1 - (image_metadata.embedding <=> query_embedding) > match_threshold
-  ORDER BY image_metadata.embedding <=> query_embedding
-  LIMIT match_count;
-END;
-$$;
-
--- Stored procedure for fuzzy tag search
-CREATE OR REPLACE FUNCTION search_images_by_tags(
-  search_term text,
-  user_filter uuid DEFAULT NULL
-)
-RETURNS TABLE (
-  id int,
-  image_id int,
-  description text,
-  tags text[],
-  match_score float
-)
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT
-    image_metadata.id,
-    image_metadata.image_id,
-    image_metadata.description,
-    image_metadata.tags,
-    similarity(array_to_string(image_metadata.tags, ' '), search_term) as match_score
-  FROM image_metadata
-  WHERE
-    (user_filter IS NULL OR image_metadata.user_id = user_filter)
-    AND (
-      search_term = ANY(image_metadata.tags)
-      OR similarity(array_to_string(image_metadata.tags, ' '), search_term) > 0.3
-    )
-  ORDER BY match_score DESC;
-END;
-$$;
+    FOR ALL USING (auth.uid() = user_id);
 ```
 
 -----------------------------------------------------------
