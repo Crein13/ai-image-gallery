@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { upload } from '../middleware/upload.js';
 import { verifyToken } from '../middleware/auth.js';
 import { uploadImage } from '../services/imageService.js';
+import { processImageAI } from '../services/aiProcessingService.js';
+import { supabase } from '../services/supabaseClient.js';
+import prisma from '../services/prismaClient.js';
 
 const router = Router();
 
@@ -69,6 +72,66 @@ router.post('/upload', verifyToken, upload.array('images', 5), async (req, res) 
 router.get('/search', async (_req, res) => {
   // TODO: Implement full-text search on description/tags and/or filter by color
   res.status(501).json({ items: [], message: 'Search not implemented yet.' });
+});
+
+// POST /api/images/:imageId/retry-ai
+router.post('/:imageId/retry-ai', verifyToken, async (req, res) => {
+  const { imageId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    // Check if image exists and belongs to user
+    const image = await prisma.images.findFirst({
+      where: {
+        id: parseInt(imageId),
+        user_id: userId,
+      },
+    });
+
+    if (!image) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    // Check metadata status
+    const metadata = await prisma.image_metadata.findFirst({
+      where: { image_id: parseInt(imageId) },
+    });
+
+    if (!metadata) {
+      return res.status(404).json({ error: 'Image metadata not found' });
+    }
+
+    if (metadata.ai_processing_status === 'completed') {
+      return res.status(400).json({ error: 'AI processing already completed' });
+    }
+
+    // Download original image from storage
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from(process.env.SUPABASE_BUCKET)
+      .download(image.original_path);
+
+    if (downloadError || !fileData) {
+      return res.status(500).json({ error: 'Failed to download image from storage' });
+    }
+
+    // Convert blob to buffer
+    const arrayBuffer = await fileData.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Trigger AI processing (fire-and-forget)
+    processImageAI(image.id, userId, buffer).catch((err) => {
+      console.error('AI retry processing failed:', err);
+    });
+
+    return res.status(202).json({
+      success: true,
+      message: 'AI processing retry initiated',
+      image_id: image.id,
+    });
+  } catch (error) {
+    console.error('Retry AI processing error:', error);
+    return res.status(500).json({ error: 'Failed to retry AI processing' });
+  }
 });
 
 export default router;

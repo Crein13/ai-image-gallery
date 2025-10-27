@@ -24,8 +24,11 @@ export async function processImageAI(imageId, userId, imageBuffer) {
     const embedding = await generateEmbedding(description);
 
     // Step 3: Update database with AI results
-    await prisma.image_metadata.update({
-      where: { image_id: imageId },
+    await prisma.image_metadata.updateMany({
+      where: {
+        image_id: imageId,
+        user_id: userId
+      },
       data: {
         description,
         tags,
@@ -38,10 +41,23 @@ export async function processImageAI(imageId, userId, imageBuffer) {
     // Log error for debugging
     console.error(`AI processing failed for image ${imageId}:`, error);
 
+    // Determine failure reason for better user feedback
+    let failureReason = 'unknown';
+    if (error.message?.includes('quota')) {
+      failureReason = 'quota_exceeded';
+    } else if (error.message?.includes('rate limit')) {
+      failureReason = 'rate_limit';
+    } else if (error.message?.includes('API key')) {
+      failureReason = 'api_key_invalid';
+    }
+
     // Mark as failed in database
     try {
-      await prisma.image_metadata.update({
-        where: { image_id: imageId },
+      await prisma.image_metadata.updateMany({
+        where: {
+          image_id: imageId,
+          user_id: userId
+        },
         data: {
           ai_processing_status: 'failed',
           updated_at: new Date(),

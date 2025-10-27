@@ -2,6 +2,56 @@ import { supabase } from './supabaseClient.js';
 import prisma from './prismaClient.js';
 import { generateThumbnail } from '../utils/imageProcessor.js';
 import { extractDominantColors } from '../utils/colorExtractor.js';
+import { processImageAI } from './aiProcessingService.js';
+
+/**
+ * Check for existing filename and generate unique version if needed
+ * @param {string} originalName - Original filename
+ * @param {string} userId - User ID for ownership
+ * @returns {Promise<string>} Unique filename (with number suffix if needed)
+ */
+async function getUniqueFilename(originalName, userId) {
+  // Check if filename already exists for this user
+  const existingImage = await prisma.images.findFirst({
+    where: {
+      user_id: userId,
+      filename: originalName,
+    },
+  });
+
+  // If no conflict, return original name
+  if (!existingImage) {
+    return originalName;
+  }
+
+  // Extract name and extension
+  const lastDotIndex = originalName.lastIndexOf('.');
+  const name = lastDotIndex > 0 ? originalName.substring(0, lastDotIndex) : originalName;
+  const extension = lastDotIndex > 0 ? originalName.substring(lastDotIndex) : '';
+
+  // Try incrementing numbers until we find an available filename
+  let counter = 1;
+  let newFilename;
+  let exists = true;
+
+  while (exists) {
+    newFilename = `${name} (${counter})${extension}`;
+    const check = await prisma.images.findFirst({
+      where: {
+        user_id: userId,
+        filename: newFilename,
+      },
+    });
+
+    if (!check) {
+      exists = false;
+    } else {
+      counter++;
+    }
+  }
+
+  return newFilename;
+}
 
 /**
  * Upload an image file to Supabase Storage and save metadata to database
@@ -32,9 +82,12 @@ export async function uploadImage(file, userId) {
   }
 
   try {
-    // Generate unique filenames
+    // Check for duplicate filename and get unique version if needed
+    const uniqueFilename = await getUniqueFilename(file.originalname, userId);
+
+    // Generate storage filenames
     const timestamp = Date.now();
-    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const sanitizedName = uniqueFilename.replace(/[^a-zA-Z0-9.-]/g, '_');
     const originalFilename = `originals/${userId}/original-${timestamp}-${sanitizedName}`;
     const thumbFilename = `thumbnails/${userId}/thumb-${timestamp}-${sanitizedName}`;
 
@@ -94,7 +147,7 @@ export async function uploadImage(file, userId) {
       const imageRecord = await prisma.images.create({
         data: {
           user_id: userId,
-          filename: file.originalname,
+          filename: uniqueFilename,
           original_path: originalData.path,
           thumbnail_path: thumbData.path,
           file_size: file.size,
@@ -102,10 +155,21 @@ export async function uploadImage(file, userId) {
         },
       });
 
-      // TODO: Trigger AI processing in background (will implement later)
-      // processImageAI(imageRecord.id, userId, file.buffer).catch(err => {
-      //   console.error('AI processing failed:', err);
-      // });
+      // Create image_metadata record with initial color data
+      await prisma.image_metadata.create({
+        data: {
+          image_id: imageRecord.id,
+          user_id: userId,
+          colors,
+          dominant_color: dominantColor,
+          ai_processing_status: 'pending',
+        },
+      });
+
+      // Trigger AI processing in background (fire-and-forget)
+      processImageAI(imageRecord.id, userId, file.buffer).catch((err) => {
+        console.error('AI processing failed:', err);
+      });
 
       // Return image record with color data
       return {

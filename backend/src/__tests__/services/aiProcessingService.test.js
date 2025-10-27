@@ -12,10 +12,12 @@ jest.unstable_mockModule('../../services/openaiService.js', () => ({
 }));
 
 const updateMock = jest.fn();
+const updateManyMock = jest.fn();
 const createMock = jest.fn();
 const prismaMock = {
   image_metadata: {
     update: updateMock,
+    updateMany: updateManyMock,
     create: createMock,
   },
 };
@@ -48,14 +50,8 @@ describe('aiProcessingService - processImageAI', () => {
       Array(1536).fill(0.1) // Mock embedding vector
     );
 
-    // Mock Prisma update
-    updateMock.mockResolvedValueOnce({
-      id: 1,
-      image_id: imageId,
-      description: 'A beautiful sunset over the ocean',
-      tags: ['sunset', 'ocean', 'nature', 'landscape'],
-      ai_processing_status: 'completed',
-    });
+    // Mock Prisma updateMany
+    updateManyMock.mockResolvedValueOnce({ count: 1 });
 
     await processImageAI(imageId, userId, mockBuffer);
 
@@ -64,8 +60,11 @@ describe('aiProcessingService - processImageAI', () => {
     expect(mockGenerateEmbedding).toHaveBeenCalledWith('A beautiful sunset over the ocean');
 
     // Verify database update
-    expect(updateMock).toHaveBeenCalledWith({
-      where: { image_id: imageId },
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: {
+        image_id: imageId,
+        user_id: userId
+      },
       data: {
         description: 'A beautiful sunset over the ocean',
         tags: ['sunset', 'ocean', 'nature', 'landscape'],
@@ -90,8 +89,98 @@ describe('aiProcessingService - processImageAI', () => {
     );
 
     // Verify status updated to failed
-    expect(updateMock).toHaveBeenCalledWith({
-      where: { image_id: imageId },
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: {
+        image_id: imageId,
+        user_id: userId
+      },
+      data: {
+        ai_processing_status: 'failed',
+        updated_at: expect.any(Date),
+      },
+    });
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  test('should categorize quota exceeded errors', async () => {
+    const quotaError = new Error('You exceeded your current quota, please check your plan and billing details.');
+    mockAnalyzeImage.mockRejectedValueOnce(quotaError);
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+    await processImageAI(imageId, userId, mockBuffer);
+
+    // Verify error logged
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      `AI processing failed for image ${imageId}:`,
+      expect.any(Error)
+    );
+
+    // Verify status updated to failed
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: {
+        image_id: imageId,
+        user_id: userId
+      },
+      data: {
+        ai_processing_status: 'failed',
+        updated_at: expect.any(Date),
+      },
+    });
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  test('should categorize rate limit errors', async () => {
+    const rateLimitError = new Error('Rate limit exceeded');
+    mockAnalyzeImage.mockRejectedValueOnce(rateLimitError);
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+    await processImageAI(imageId, userId, mockBuffer);
+
+    // Verify error logged
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      `AI processing failed for image ${imageId}:`,
+      expect.any(Error)
+    );
+
+    // Verify status updated to failed
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: {
+        image_id: imageId,
+        user_id: userId
+      },
+      data: {
+        ai_processing_status: 'failed',
+        updated_at: expect.any(Date),
+      },
+    });
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  test('should categorize API key errors', async () => {
+    const apiKeyError = new Error('Invalid API key provided');
+    mockAnalyzeImage.mockRejectedValueOnce(apiKeyError);
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+    await processImageAI(imageId, userId, mockBuffer);
+
+    // Verify error logged
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      `AI processing failed for image ${imageId}:`,
+      expect.any(Error)
+    );
+
+    // Verify status updated to failed
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: {
+        image_id: imageId,
+        user_id: userId
+      },
       data: {
         ai_processing_status: 'failed',
         updated_at: expect.any(Date),
@@ -114,8 +203,11 @@ describe('aiProcessingService - processImageAI', () => {
     await processImageAI(imageId, userId, mockBuffer);
 
     // Should still update with description/tags but no embedding
-    expect(updateMock).toHaveBeenCalledWith({
-      where: { image_id: imageId },
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: {
+        image_id: imageId,
+        user_id: userId
+      },
       data: {
         ai_processing_status: 'failed',
         updated_at: expect.any(Date),
@@ -144,12 +236,15 @@ describe('aiProcessingService - processImageAI', () => {
 
     mockGenerateEmbedding.mockResolvedValueOnce(Array(1536).fill(0));
 
-    updateMock.mockResolvedValueOnce({});
+    updateManyMock.mockResolvedValueOnce({ count: 1 });
 
     await processImageAI(imageId, userId, mockBuffer);
 
-    expect(updateMock).toHaveBeenCalledWith({
-      where: { image_id: imageId },
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: {
+        image_id: imageId,
+        user_id: userId
+      },
       data: {
         description: 'An image',
         tags: [],
