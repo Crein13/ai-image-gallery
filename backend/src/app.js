@@ -22,7 +22,9 @@ app.use('/api/images', imageRoutes);
 
 // Log registered routes (dev aid)
 printEndpoints([
+  { method: 'GET', path: '/health', methods: ['GET'] },
   ...listEndpointsForRouter('/api/auth', authRoutes),
+  ...listEndpointsForRouter('/api/images', imageRoutes),
 ]);
 
 // Error handlers (must be after all routes)

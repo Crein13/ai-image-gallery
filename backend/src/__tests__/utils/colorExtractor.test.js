@@ -1,4 +1,3 @@
-import { jest } from '@jest/globals';
 import { rgbToHex, extractDominantColors } from '../../utils/colorExtractor.js';
 
 describe('colorExtractor', () => {

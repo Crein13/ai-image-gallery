@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient.js';
 import prisma from './prismaClient.js';
 import { generateThumbnail } from '../utils/imageProcessor.js';
+import { extractDominantColors } from '../utils/colorExtractor.js';
 
 /**
  * Upload an image file to Supabase Storage and save metadata to database
@@ -34,8 +35,19 @@ export async function uploadImage(file, userId) {
     // Generate unique filenames
     const timestamp = Date.now();
     const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const originalFilename = `original-${timestamp}-${sanitizedName}`;
-    const thumbFilename = `thumb-${timestamp}-${sanitizedName}`;
+    const originalFilename = `originals/${userId}/original-${timestamp}-${sanitizedName}`;
+    const thumbFilename = `thumbnails/${userId}/thumb-${timestamp}-${sanitizedName}`;
+
+    // Extract dominant colors (synchronous during upload)
+    let colors = [];
+    let dominantColor = null;
+    try {
+      colors = await extractDominantColors(file.buffer);
+      dominantColor = colors.length > 0 ? colors[0] : null;
+    } catch (error) {
+      console.warn('Color extraction failed:', error);
+      // Continue with upload even if color extraction fails
+    }
 
     // Generate thumbnail using imageProcessor utility
     let thumbnailBuffer;
@@ -51,7 +63,7 @@ export async function uploadImage(file, userId) {
 
     // Upload original image to Supabase Storage
     const { data: originalData, error: originalError } = await supabase.storage
-      .from('images')
+      .from(process.env.SUPABASE_BUCKET)
       .upload(originalFilename, file.buffer, {
         contentType: file.mimetype,
       });
@@ -65,7 +77,7 @@ export async function uploadImage(file, userId) {
 
     // Upload thumbnail to Supabase Storage
     const { data: thumbData, error: thumbError } = await supabase.storage
-      .from('images')
+      .from(process.env.SUPABASE_BUCKET)
       .upload(thumbFilename, thumbnailBuffer, {
         contentType: file.mimetype,
       });
@@ -90,7 +102,18 @@ export async function uploadImage(file, userId) {
         },
       });
 
-      return imageRecord;
+      // TODO: Trigger AI processing in background (will implement later)
+      // processImageAI(imageRecord.id, userId, file.buffer).catch(err => {
+      //   console.error('AI processing failed:', err);
+      // });
+
+      // Return image record with color data
+      return {
+        ...imageRecord,
+        colors,
+        dominant_color: dominantColor,
+        ai_processing_status: 'pending', // Will be updated by AI processing
+      };
     } catch (error) {
       console.error('Prisma create error:', error);
       const err = new Error('Failed to save image record');

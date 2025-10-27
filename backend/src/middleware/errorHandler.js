@@ -19,6 +19,9 @@ export function errorHandler(err, _req, res, _next) {
     if (err.code === 'LIMIT_FILE_COUNT') {
       return res.status(400).json({ error: 'Too many files' });
     }
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ error: 'Unexpected field name. Use "images" as the field name in form-data' });
+    }
     return res.status(400).json({ error: err.message, code: err.code });
   }
 
