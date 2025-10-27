@@ -49,7 +49,7 @@ jest.unstable_mockModule('../../../src/services/aiProcessingService.js', () => (
 }));
 
 // Import service after mocks
-const { uploadImage } = await import('../../../src/services/imageService.js');
+const { uploadImage } = await import('../../services/imageService.js');
 
 describe('imageService - uploadImage', () => {
   const userId = '00000000-0000-0000-0000-000000000001';
