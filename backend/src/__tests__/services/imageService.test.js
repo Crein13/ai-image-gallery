@@ -10,6 +10,8 @@ const prismaMock = {
 };
 
 const generateThumbnailMock = jest.fn();
+const extractDominantColorsMock = jest.fn();
+const processImageAIMock = jest.fn();
 
 // Mock Supabase client to simulate storage bucket operations (upload original and thumbnail)
 jest.unstable_mockModule('../../../src/services/supabaseClient.js', () => ({
@@ -27,6 +29,16 @@ jest.unstable_mockModule('../../../src/services/prismaClient.js', () => ({
 // Mock imageProcessor utility for thumbnail generation
 jest.unstable_mockModule('../../../src/utils/imageProcessor.js', () => ({
   generateThumbnail: generateThumbnailMock,
+}));
+
+// Mock colorExtractor utility
+jest.unstable_mockModule('../../../src/utils/colorExtractor.js', () => ({
+  extractDominantColors: extractDominantColorsMock,
+}));
+
+// Mock aiProcessingService for background processing
+jest.unstable_mockModule('../../../src/services/aiProcessingService.js', () => ({
+  processImageAI: processImageAIMock,
 }));
 
 // Import service after mocks
@@ -60,7 +72,12 @@ describe('imageService - uploadImage', () => {
     await expect(uploadImage(gifFile, userId)).rejects.toThrow('Only JPEG, PNG, and WebP images are allowed');
   });
 
-  test('uploads original and thumbnail to Supabase Storage, creates DB record', async () => {
+  test('uploads original and thumbnail to Supabase Storage, creates DB record with colors', async () => {
+    // Mock color extraction
+    extractDominantColorsMock.mockResolvedValueOnce([
+      '#FF5733', '#3498DB', '#2ECC71', '#F39C12', '#9B59B6'
+    ]);
+
     // Mock thumbnail generation
     generateThumbnailMock.mockResolvedValueOnce({
       thumbnailBuffer: Buffer.from('thumbnail-data'),
@@ -73,7 +90,7 @@ describe('imageService - uploadImage', () => {
       .mockResolvedValueOnce({ data: { path: 'original.jpg' }, error: null }) // Original
       .mockResolvedValueOnce({ data: { path: 'thumb.jpg' }, error: null }); // Thumbnail
 
-    // Mock Prisma create
+    // Mock Prisma create for images table
     createMock.mockResolvedValueOnce({
       id: 1,
       user_id: userId,
@@ -85,6 +102,9 @@ describe('imageService - uploadImage', () => {
     });
 
     const result = await uploadImage(mockFile, userId);
+
+    // Verify color extraction was called
+    expect(extractDominantColorsMock).toHaveBeenCalledWith(mockFile.buffer);
 
     // Verify generateThumbnail was called
     expect(generateThumbnailMock).toHaveBeenCalledWith(mockFile.buffer, 300);
@@ -117,16 +137,63 @@ describe('imageService - uploadImage', () => {
       },
     });
 
-    // Verify result
+    // Verify AI processing was triggered (fire-and-forget)
+    expect(processImageAIMock).toHaveBeenCalledWith(1, userId, mockFile.buffer);
+
+    // Verify result includes colors and metadata
     expect(result).toMatchObject({
       id: 1,
       filename: 'test.jpg',
       original_path: 'original.jpg',
       thumbnail_path: 'thumb.jpg',
+      colors: ['#FF5733', '#3498DB', '#2ECC71', '#F39C12', '#9B59B6'],
+      dominant_color: '#FF5733',
+      ai_processing_status: 'pending',
     });
   });
 
+  test('handles color extraction failure gracefully', async () => {
+    extractDominantColorsMock.mockRejectedValueOnce(new Error('Color extraction failed'));
+
+    // Should still complete upload with empty colors
+    generateThumbnailMock.mockResolvedValueOnce({
+      thumbnailBuffer: Buffer.from('thumbnail-data'),
+      width: 300,
+      height: 225,
+    });
+
+    uploadMock
+      .mockResolvedValueOnce({ data: { path: 'original.jpg' }, error: null })
+      .mockResolvedValueOnce({ data: { path: 'thumb.jpg' }, error: null });
+
+    createMock.mockResolvedValueOnce({
+      id: 1,
+      user_id: userId,
+      filename: 'test.jpg',
+      original_path: 'original.jpg',
+      thumbnail_path: 'thumb.jpg',
+      file_size: 500000,
+      mime_type: 'image/jpeg',
+    });
+
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    const result = await uploadImage(mockFile, userId);
+
+    // Verify warning was logged
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      'Color extraction failed:',
+      expect.any(Error)
+    );
+
+    // Upload should succeed with empty colors
+    expect(result.colors).toEqual([]);
+    expect(result.dominant_color).toBeNull();
+
+    consoleWarnSpy.mockRestore();
+  });
   test('throws error if Supabase storage upload fails', async () => {
+    extractDominantColorsMock.mockResolvedValueOnce(['#FF5733']);
     generateThumbnailMock.mockResolvedValueOnce({
       thumbnailBuffer: Buffer.from('thumbnail-data'),
       width: 300,
@@ -138,12 +205,14 @@ describe('imageService - uploadImage', () => {
   });
 
   test('throws error if thumbnail generation fails', async () => {
+    extractDominantColorsMock.mockResolvedValueOnce(['#FF5733']);
     generateThumbnailMock.mockRejectedValueOnce(new Error('Sharp processing failed'));
 
     await expect(uploadImage(mockFile, userId)).rejects.toThrow('Failed to generate thumbnail');
   });
 
   test('throws error if DB insert fails', async () => {
+    extractDominantColorsMock.mockResolvedValueOnce(['#FF5733']);
     generateThumbnailMock.mockResolvedValueOnce({
       thumbnailBuffer: Buffer.from('thumbnail-data'),
       width: 300,
