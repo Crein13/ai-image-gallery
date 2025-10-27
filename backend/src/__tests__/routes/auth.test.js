@@ -4,12 +4,10 @@ import request from 'supertest'
 // Mock the authService module before importing the app
 const signup = jest.fn()
 const signin = jest.fn()
-const logout = jest.fn()
 
 jest.unstable_mockModule('../../services/authService.js', () => ({
   signup,
   signin,
-  logout,
 }))
 
 const { default: app } = await import('../../app.js')
@@ -18,7 +16,6 @@ describe('Auth routes', () => {
   beforeEach(() => {
     signup.mockReset()
     signin.mockReset()
-    logout.mockReset()
   })
 
   describe('POST /api/auth/signup', () => {
@@ -61,23 +58,6 @@ describe('Auth routes', () => {
         .send({ email: '', password: '' })
       expect(res.status).toBe(400)
       expect(res.body).toHaveProperty('error', 'Email and password are required')
-    })
-  })
-
-  describe('POST /api/auth/logout', () => {
-    it('returns 200 on success', async () => {
-      logout.mockResolvedValueOnce({ success: true })
-      const res = await request(app).post('/api/auth/logout')
-      expect(res.status).toBe(200)
-      expect(res.body).toEqual({ success: true })
-    })
-
-    it('propagates provider error as 400', async () => {
-      const err = new Error('not logged in'); err.status = 400
-      logout.mockRejectedValueOnce(err)
-      const res = await request(app).post('/api/auth/logout')
-      expect(res.status).toBe(400)
-      expect(res.body).toHaveProperty('error', 'not logged in')
     })
   })
 })

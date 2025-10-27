@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { signup, signin, logout } from '../services/authService.js';
+import { signup, signin } from '../services/authService.js';
 
 const router = Router();
 
@@ -19,16 +19,6 @@ router.post('/signin', async (req, res, next) => {
   try {
     const { email, password } = req.body || {};
     const result = await signin(email, password);
-    res.status(200).json(result);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// POST /api/auth/logout
-router.post('/logout', async (_req, res, next) => {
-  try {
-    const result = await logout();
     res.status(200).json(result);
   } catch (err) {
     next(err);

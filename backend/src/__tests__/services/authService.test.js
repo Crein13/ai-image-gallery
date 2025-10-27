@@ -3,25 +3,22 @@ import { jest } from '@jest/globals'
 // Mock Supabase client before importing the service
 const signUp = jest.fn()
 const signInWithPassword = jest.fn()
-const signOut = jest.fn()
 
 jest.unstable_mockModule('../../services/supabaseClient.js', () => ({
   supabase: {
     auth: {
       signUp,
       signInWithPassword,
-      signOut,
     },
   },
 }))
 
-const { signup, signin, logout } = await import('../../services/authService.js')
+const { signup, signin } = await import('../../services/authService.js')
 
 describe('authService', () => {
   beforeEach(() => {
     signUp.mockReset()
     signInWithPassword.mockReset()
-    signOut.mockReset()
   })
 
   describe('signup', () => {
@@ -61,20 +58,6 @@ describe('authService', () => {
     it('throws when provider returns error', async () => {
       signInWithPassword.mockResolvedValueOnce({ data: { session: null, user: null }, error: new Error('invalid') })
       await expect(signin('user@example.com', 'Password123!')).rejects.toThrow('invalid')
-    })
-  })
-
-  describe('logout', () => {
-    it('calls provider signOut and returns ok', async () => {
-      signOut.mockResolvedValueOnce({ error: null })
-      const res = await logout()
-      expect(signOut).toHaveBeenCalled()
-      expect(res).toEqual({ success: true })
-    })
-
-    it('throws when provider returns error', async () => {
-      signOut.mockResolvedValueOnce({ error: new Error('not logged in') })
-      await expect(logout()).rejects.toThrow('not logged in')
     })
   })
 })

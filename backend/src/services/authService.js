@@ -43,13 +43,3 @@ export async function signin(email, password) {
   }
   return { access_token: data.session?.access_token, user: data.user }
 }
-
-export async function logout() {
-  const { error } = await supabase.auth.signOut()
-  if (error) {
-    const err = new Error(error.message || 'Logout failed')
-    err.status = 400
-    throw err
-  }
-  return { success: true }
-}
