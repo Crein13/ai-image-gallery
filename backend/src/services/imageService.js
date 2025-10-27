@@ -5,6 +5,72 @@ import { extractDominantColors } from '../utils/colorExtractor.js';
 import { processImageAI } from './aiProcessingService.js';
 
 /**
+ * List images for a user with pagination and basic sorting
+ * No business logic in routes: called by routes/images.js
+ *
+ * @param {Object} params
+ * @param {string} params.userId
+ * @param {number} [params.limit=20]
+ * @param {number} [params.offset=0]
+ * @param {('newest'|'oldest')} [params.sort='newest']
+ * @returns {Promise<{items: Array, total: number, limit: number, offset: number}>}
+ */
+export async function listImages({ userId, limit = 20, offset = 0, sort = 'newest' }) {
+  // Normalize params
+  const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+  const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
+  const orderBy = sort === 'oldest' ? { uploaded_at: 'asc' } : { uploaded_at: 'desc' };
+
+  const where = { user_id: userId };
+
+  const [total, rows] = await Promise.all([
+    prisma.images.count({ where }),
+    prisma.images.findMany({
+      where,
+      orderBy,
+      take: safeLimit,
+      skip: safeOffset,
+      include: {
+        image_metadata: {
+          select: {
+            description: true,
+            tags: true,
+            colors: true,
+            dominant_color: true,
+            ai_processing_status: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const items = rows.map((img) => {
+    const md = Array.isArray(img.image_metadata) ? img.image_metadata[0] : null;
+    return {
+      id: img.id,
+      user_id: img.user_id,
+      filename: img.filename,
+      original_path: img.original_path,
+      thumbnail_path: img.thumbnail_path,
+      file_size: img.file_size,
+      mime_type: img.mime_type,
+      uploaded_at: img.uploaded_at,
+      metadata: md
+        ? {
+            description: md.description ?? null,
+            tags: md.tags ?? [],
+            colors: md.colors ?? [],
+            dominant_color: md.dominant_color ?? null,
+            ai_processing_status: md.ai_processing_status ?? 'pending',
+          }
+        : null,
+    };
+  });
+
+  return { items, total, limit: safeLimit, offset: safeOffset };
+}
+
+/**
  * Check for existing filename and generate unique version if needed
  * @param {string} originalName - Original filename
  * @param {string} userId - User ID for ownership

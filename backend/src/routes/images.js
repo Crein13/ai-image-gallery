@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { upload } from '../middleware/upload.js';
 import { verifyToken } from '../middleware/auth.js';
 import { uploadImage } from '../services/imageService.js';
+import { listImages } from '../services/imageService.js';
 import { processImageAI } from '../services/aiProcessingService.js';
 import { supabase } from '../services/supabaseClient.js';
 import prisma from '../services/prismaClient.js';
@@ -9,9 +10,21 @@ import prisma from '../services/prismaClient.js';
 const router = Router();
 
 // GET /api/images
-router.get('/', async (_req, res) => {
-  // TODO: Use Prisma to fetch images for the authenticated user (via Supabase JWT)
-  res.status(200).json({ items: [], message: 'List images - implement DB query.' });
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const limitParam = req.query.limit ? parseInt(req.query.limit, 10) : NaN;
+    const offsetParam = req.query.offset ? parseInt(req.query.offset, 10) : NaN;
+    const limit = Number.isFinite(limitParam) ? limitParam : 20;
+    const offset = Number.isFinite(offsetParam) ? offsetParam : 0;
+    const sort = req.query.sort === 'oldest' ? 'oldest' : 'newest';
+
+    const payload = await listImages({ userId, limit, offset, sort });
+    return res.status(200).json(payload);
+  } catch (error) {
+    console.error('List images error:', error);
+    return res.status(500).json({ error: 'Failed to list images' });
+  }
 });
 
 // POST /api/images/upload
