@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { upload } from '../middleware/upload.js';
 import { verifyToken } from '../middleware/auth.js';
-import { uploadImage, listImages, getImageById, searchImages } from '../services/imageService.js';
+import { uploadImage, listImages, getImageById, searchImages, findSimilarToImage } from '../services/imageService.js';
 import { processImageAI } from '../services/aiProcessingService.js';
 import { supabase } from '../services/supabaseClient.js';
 import prisma from '../services/prismaClient.js';
@@ -257,6 +257,36 @@ router.post('/:imageId/retry-ai', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('Retry AI processing error:', error);
     return res.status(500).json({ error: 'Failed to retry AI processing' });
+  }
+});
+
+// GET /api/images/:id/similar - Find similar images based on tags/colors
+router.get('/:id/similar', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const imageId = parseInt(req.params.id, 10);
+
+    if (!Number.isFinite(imageId)) {
+      return res.status(400).json({ error: 'Invalid image ID' });
+    }
+
+    const limitParam = req.query.limit ? parseInt(req.query.limit, 10) : NaN;
+    const limit = Number.isFinite(limitParam) ? limitParam : 20;
+
+    const result = await findSimilarToImage({ imageId, userId, limit });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Find similar images error:', error);
+
+    if (error.status === 404) {
+      return res.status(404).json({ error: error.message });
+    }
+    if (error.status === 400) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(500).json({ error: 'Failed to find similar images' });
   }
 });
 

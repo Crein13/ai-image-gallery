@@ -20,6 +20,7 @@ jest.unstable_mockModule('../../services/supabaseClient.js', () => ({
 // Mock Prisma
 const mockPrismaFindMany = jest.fn();
 const mockPrismaCount = jest.fn();
+const mockPrismaQueryRaw = jest.fn();
 
 jest.unstable_mockModule('../../services/prismaClient.js', () => ({
   default: {
@@ -27,6 +28,7 @@ jest.unstable_mockModule('../../services/prismaClient.js', () => ({
       findMany: mockPrismaFindMany,
       count: mockPrismaCount,
     },
+    $queryRaw: mockPrismaQueryRaw,
   },
 }));
 
@@ -37,11 +39,27 @@ describe('imageService.searchImages', () => {
     jest.clearAllMocks();
   });
 
-  describe('Text Search (tags and description)', () => {
-    test('searches by query term in tags (case-insensitive)', async () => {
-      const mockResults = [
+  describe('Fuzzy Text Search via Stored Procedure', () => {
+    test('uses stored procedure for text-only search with fuzzy matching', async () => {
+      // Mock stored procedure results
+      const mockSearchResults = [
         {
           id: 1,
+          image_id: 101,
+          description: 'A beautiful sunset at the beach',
+          tags: ['beach', 'sunset', 'ocean'],
+          colors: ['#ff6b35'],
+          dominant_color: '#ff6b35',
+          ai_processing_status: 'completed',
+          match_score: 0.85,
+        },
+      ];
+
+      const mockCountResult = [{ count: BigInt(1) }];
+
+      const mockImageData = [
+        {
+          id: 101,
           user_id: 'user-123',
           filename: 'beach.jpg',
           original_path: 'originals/user-123/beach.jpg',
@@ -61,8 +79,12 @@ describe('imageService.searchImages', () => {
         },
       ];
 
-      mockPrismaCount.mockResolvedValueOnce(1);
-      mockPrismaFindMany.mockResolvedValueOnce(mockResults);
+      // Setup mocks for stored procedure path
+      mockPrismaQueryRaw
+        .mockResolvedValueOnce(mockSearchResults) // First call: search results
+        .mockResolvedValueOnce(mockCountResult); // Second call: count
+
+      mockPrismaFindMany.mockResolvedValueOnce(mockImageData);
 
       const result = await searchImages({
         userId: 'user-123',
@@ -71,68 +93,19 @@ describe('imageService.searchImages', () => {
         offset: 0,
       });
 
-      expect(mockPrismaFindMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            user_id: 'user-123',
-            image_metadata: expect.objectContaining({
-              some: expect.objectContaining({
-                OR: expect.arrayContaining([
-                  { tags: { has: 'beach' } },
-                  { description: { contains: 'beach', mode: 'insensitive' } },
-                ]),
-              }),
-            }),
-          }),
-        })
-      );
-
+      // Verify stored procedure was called
+      expect(mockPrismaQueryRaw).toHaveBeenCalledTimes(2);
+      
+      // Verify results
       expect(result.items).toHaveLength(1);
       expect(result.items[0].metadata.tags).toContain('beach');
       expect(result.total).toBe(1);
     });
 
-    test('searches by query term in description (case-insensitive)', async () => {
-      const mockResults = [
-        {
-          id: 2,
-          user_id: 'user-123',
-          filename: 'sunset.jpg',
-          original_path: 'originals/user-123/sunset.jpg',
-          thumbnail_path: 'thumbnails/user-123/sunset.jpg',
-          file_size: 2048000,
-          mime_type: 'image/jpeg',
-          uploaded_at: new Date('2025-01-02'),
-          image_metadata: [
-            {
-              description: 'Golden hour at the mountain peak',
-              tags: ['mountain', 'golden-hour'],
-              colors: ['#ffa500'],
-              dominant_color: '#ffa500',
-              ai_processing_status: 'completed',
-            },
-          ],
-        },
-      ];
-
-      mockPrismaCount.mockResolvedValueOnce(1);
-      mockPrismaFindMany.mockResolvedValueOnce(mockResults);
-
-      const result = await searchImages({
-        userId: 'user-123',
-        query: 'mountain',
-        limit: 20,
-        offset: 0,
-      });
-
-      expect(result.items).toHaveLength(1);
-      expect(result.items[0].metadata.description).toContain('mountain');
-      expect(result.total).toBe(1);
-    });
-
-    test('returns empty array when no results match query', async () => {
-      mockPrismaCount.mockResolvedValueOnce(0);
-      mockPrismaFindMany.mockResolvedValueOnce([]);
+    test('returns empty results when stored procedure finds no matches', async () => {
+      mockPrismaQueryRaw
+        .mockResolvedValueOnce([]) // Empty search results
+        .mockResolvedValueOnce([{ count: BigInt(0) }]); // Zero count
 
       const result = await searchImages({
         userId: 'user-123',
@@ -145,29 +118,55 @@ describe('imageService.searchImages', () => {
       expect(result.total).toBe(0);
     });
 
-    test('enforces user ownership in search', async () => {
-      mockPrismaCount.mockResolvedValueOnce(0);
-      mockPrismaFindMany.mockResolvedValueOnce([]);
+    test('handles pagination with stored procedure', async () => {
+      const mockSearchResults = [
+        {
+          id: 1,
+          image_id: 101,
+          description: 'Test image',
+          tags: ['test'],
+          colors: [],
+          dominant_color: null,
+          ai_processing_status: 'completed',
+          match_score: 0.9,
+        },
+      ];
 
-      await searchImages({
-        userId: 'user-456',
+      mockPrismaQueryRaw
+        .mockResolvedValueOnce(mockSearchResults)
+        .mockResolvedValueOnce([{ count: BigInt(50) }]);
+
+      mockPrismaFindMany.mockResolvedValueOnce([
+        {
+          id: 101,
+          user_id: 'user-123',
+          filename: 'test.jpg',
+          original_path: 'test.jpg',
+          thumbnail_path: 'test-thumb.jpg',
+          file_size: 1000,
+          mime_type: 'image/jpeg',
+          uploaded_at: new Date(),
+          image_metadata: [mockSearchResults[0]],
+        },
+      ]);
+
+      const result = await searchImages({
+        userId: 'user-123',
         query: 'test',
-        limit: 20,
-        offset: 0,
+        limit: 10,
+        offset: 20,
       });
 
-      expect(mockPrismaFindMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            user_id: 'user-456',
-          }),
-        })
-      );
+      expect(result.total).toBe(50);
+      expect(result.limit).toBe(10);
+      expect(result.offset).toBe(20);
+      expect(result.hasNext).toBe(true);
+      expect(result.hasPrev).toBe(true);
     });
   });
 
-  describe('Color Filtering', () => {
-    test('filters by exact color match in colors array', async () => {
+  describe('Prisma-based Search (with color or oldest sort)', () => {
+    test('uses Prisma when color filter is provided', async () => {
       const mockResults = [
         {
           id: 3,
@@ -200,13 +199,83 @@ describe('imageService.searchImages', () => {
         offset: 0,
       });
 
+      // Should use Prisma, not stored procedure
+      expect(mockPrismaQueryRaw).not.toHaveBeenCalled();
+      expect(mockPrismaFindMany).toHaveBeenCalled();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].metadata.colors).toContain('#0000ff');
+    });
+
+    test('uses Prisma when sort=oldest is specified', async () => {
+      mockPrismaCount.mockResolvedValueOnce(0);
+      mockPrismaFindMany.mockResolvedValueOnce([]);
+
+      await searchImages({
+        userId: 'user-123',
+        query: 'test',
+        sort: 'oldest',
+      });
+
+      // Should use Prisma with oldest sort
+      expect(mockPrismaQueryRaw).not.toHaveBeenCalled();
+      expect(mockPrismaFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: { uploaded_at: 'asc' },
+        })
+      );
+    });
+
+    test('combines text and color filters with Prisma', async () => {
+      const mockResults = [
+        {
+          id: 5,
+          user_id: 'user-123',
+          filename: 'blue-ocean.jpg',
+          original_path: 'originals/user-123/blue-ocean.jpg',
+          thumbnail_path: 'thumbnails/user-123/blue-ocean.jpg',
+          file_size: 2200000,
+          mime_type: 'image/jpeg',
+          uploaded_at: new Date('2025-01-05'),
+          image_metadata: [
+            {
+              description: 'Blue ocean waves',
+              tags: ['ocean', 'blue', 'water'],
+              colors: ['#0000ff', '#1e90ff'],
+              dominant_color: '#0000ff',
+              ai_processing_status: 'completed',
+            },
+          ],
+        },
+      ];
+
+      mockPrismaCount.mockResolvedValueOnce(1);
+      mockPrismaFindMany.mockResolvedValueOnce(mockResults);
+
+      const result = await searchImages({
+        userId: 'user-123',
+        query: 'ocean',
+        color: '#0000ff',
+        limit: 20,
+        offset: 0,
+      });
+
+      expect(mockPrismaQueryRaw).not.toHaveBeenCalled();
       expect(mockPrismaFindMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
             user_id: 'user-123',
             image_metadata: expect.objectContaining({
               some: expect.objectContaining({
-                colors: { has: '#0000ff' },
+                AND: expect.arrayContaining([
+                  expect.objectContaining({
+                    OR: expect.arrayContaining([
+                      { tags: { has: 'ocean' } },
+                      { description: { contains: 'ocean', mode: 'insensitive' } },
+                    ]),
+                  }),
+                  { colors: { has: '#0000ff' } },
+                ]),
               }),
             }),
           }),
@@ -214,10 +283,9 @@ describe('imageService.searchImages', () => {
       );
 
       expect(result.items).toHaveLength(1);
-      expect(result.items[0].metadata.colors).toContain('#0000ff');
     });
 
-    test('filters by dominant color', async () => {
+    test('filters by dominant color only', async () => {
       const mockResults = [
         {
           id: 4,
@@ -265,80 +333,71 @@ describe('imageService.searchImages', () => {
 
       expect(result.items[0].metadata.dominant_color).toBe('#ff0000');
     });
+  });
 
-    test('returns empty array when no images match color', async () => {
+  describe('Validation and Edge Cases', () => {
+    test('validates and normalizes color format', async () => {
       mockPrismaCount.mockResolvedValueOnce(0);
       mockPrismaFindMany.mockResolvedValueOnce([]);
 
-      const result = await searchImages({
+      // Test with uppercase hex
+      await searchImages({
         userId: 'user-123',
-        color: '#123456',
-        limit: 20,
-        offset: 0,
+        color: '#FF0000',
       });
 
-      expect(result.items).toHaveLength(0);
-      expect(result.total).toBe(0);
-    });
-  });
-
-  describe('Combined Search (text + color)', () => {
-    test('combines query and color filters with AND logic', async () => {
-      const mockResults = [
-        {
-          id: 5,
-          user_id: 'user-123',
-          filename: 'blue-ocean.jpg',
-          original_path: 'originals/user-123/blue-ocean.jpg',
-          thumbnail_path: 'thumbnails/user-123/blue-ocean.jpg',
-          file_size: 2200000,
-          mime_type: 'image/jpeg',
-          uploaded_at: new Date('2025-01-05'),
-          image_metadata: [
-            {
-              description: 'Blue ocean waves',
-              tags: ['ocean', 'blue', 'water'],
-              colors: ['#0000ff', '#1e90ff'],
-              dominant_color: '#0000ff',
-              ai_processing_status: 'completed',
-            },
-          ],
-        },
-      ];
-
-      mockPrismaCount.mockResolvedValueOnce(1);
-      mockPrismaFindMany.mockResolvedValueOnce(mockResults);
-
-      const result = await searchImages({
-        userId: 'user-123',
-        query: 'ocean',
-        color: '#0000ff',
-        limit: 20,
-        offset: 0,
-      });
-
+      // Should normalize to lowercase
       expect(mockPrismaFindMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            user_id: 'user-123',
             image_metadata: expect.objectContaining({
               some: expect.objectContaining({
-                AND: expect.arrayContaining([
-                  expect.objectContaining({
-                    OR: expect.arrayContaining([
-                      { tags: { has: 'ocean' } },
-                      { description: { contains: 'ocean', mode: 'insensitive' } },
-                    ]),
-                  }),
-                  { colors: { has: '#0000ff' } },
-                ]),
+                colors: { has: '#ff0000' },
               }),
             }),
           }),
         })
       );
+    });
 
-      expect(result.items).toHaveLength(1);
+    test('throws error for invalid color format', async () => {
+      await expect(
+        searchImages({
+          userId: 'user-123',
+          color: 'invalid-color',
+        })
+      ).rejects.toThrow('Invalid color format');
+    });
+
+    test('handles empty query string without color (returns all images)', async () => {
+      mockPrismaCount.mockResolvedValueOnce(10);
+      mockPrismaFindMany.mockResolvedValueOnce([]);
+
+      const result = await searchImages({
+        userId: 'user-123',
+        query: '   ', // Whitespace only
+      });
+
+      // Should not use stored procedure for empty query
+      expect(mockPrismaFindMany).toHaveBeenCalled();
+    });
+
+    test('enforces user ownership in all searches', async () => {
+      mockPrismaCount.mockResolvedValueOnce(0);
+      mockPrismaFindMany.mockResolvedValueOnce([]);
+
+      await searchImages({
+        userId: 'user-456',
+        color: '#ff0000',
+      });
+
+      expect(mockPrismaFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            user_id: 'user-456',
+          }),
+        })
+      );
     });
   });
 
@@ -349,7 +408,7 @@ describe('imageService.searchImages', () => {
 
       await searchImages({
         userId: 'user-123',
-        query: 'test',
+        color: '#ff0000', // Force Prisma path
         limit: 10,
         offset: 20,
       });
@@ -368,7 +427,7 @@ describe('imageService.searchImages', () => {
 
       await searchImages({
         userId: 'user-123',
-        query: 'test',
+        color: '#ff0000', // Force Prisma path
       });
 
       expect(mockPrismaFindMany).toHaveBeenCalledWith(
@@ -385,7 +444,7 @@ describe('imageService.searchImages', () => {
 
       const result = await searchImages({
         userId: 'user-123',
-        query: 'test',
+        color: '#ff0000', // Force Prisma path
         limit: 20,
         offset: 40,
       });
@@ -397,42 +456,6 @@ describe('imageService.searchImages', () => {
       expect(result.hasPrev).toBe(true);
       expect(result.nextOffset).toBe(60);
       expect(result.prevOffset).toBe(20);
-    });
-  });
-
-  describe('Sorting', () => {
-    test('sorts by newest (default)', async () => {
-      mockPrismaCount.mockResolvedValueOnce(2);
-      mockPrismaFindMany.mockResolvedValueOnce([]);
-
-      await searchImages({
-        userId: 'user-123',
-        query: 'test',
-        sort: 'newest',
-      });
-
-      expect(mockPrismaFindMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          orderBy: { uploaded_at: 'desc' },
-        })
-      );
-    });
-
-    test('sorts by oldest when specified', async () => {
-      mockPrismaCount.mockResolvedValueOnce(2);
-      mockPrismaFindMany.mockResolvedValueOnce([]);
-
-      await searchImages({
-        userId: 'user-123',
-        query: 'test',
-        sort: 'oldest',
-      });
-
-      expect(mockPrismaFindMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          orderBy: { uploaded_at: 'asc' },
-        })
-      );
     });
   });
 
@@ -465,7 +488,7 @@ describe('imageService.searchImages', () => {
 
       const result = await searchImages({
         userId: 'user-123',
-        query: 'pending',
+        color: '#ff0000', // Force Prisma path
       });
 
       expect(result.items[0].metadata).toEqual({
@@ -497,66 +520,10 @@ describe('imageService.searchImages', () => {
 
       const result = await searchImages({
         userId: 'user-123',
-        query: 'test',
+        color: '#ff0000', // Force Prisma path
       });
 
       expect(result.items[0].metadata).toBeNull();
-    });
-  });
-
-  describe('Edge Cases', () => {
-    test('handles empty query string', async () => {
-      mockPrismaCount.mockResolvedValueOnce(0);
-      mockPrismaFindMany.mockResolvedValueOnce([]);
-
-      const result = await searchImages({
-        userId: 'user-123',
-        query: '',
-      });
-
-      // Should not add query filter if empty
-      expect(mockPrismaFindMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            user_id: 'user-123',
-          }),
-        })
-      );
-
-      expect(result.items).toHaveLength(0);
-    });
-
-    test('validates and normalizes color format', async () => {
-      mockPrismaCount.mockResolvedValueOnce(0);
-      mockPrismaFindMany.mockResolvedValueOnce([]);
-
-      // Test with uppercase hex
-      await searchImages({
-        userId: 'user-123',
-        color: '#FF0000',
-      });
-
-      // Should normalize to lowercase
-      expect(mockPrismaFindMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            image_metadata: expect.objectContaining({
-              some: expect.objectContaining({
-                colors: { has: '#ff0000' },
-              }),
-            }),
-          }),
-        })
-      );
-    });
-
-    test('throws error for invalid color format', async () => {
-      await expect(
-        searchImages({
-          userId: 'user-123',
-          color: 'invalid-color',
-        })
-      ).rejects.toThrow('Invalid color format');
     });
   });
 });

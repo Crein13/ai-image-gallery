@@ -67,7 +67,7 @@ describe('openaiService', () => {
             content: [
               {
                 type: 'text',
-                text: 'Analyze this image and provide a concise description and 3-7 relevant tags (objects, colors, concepts, mood). Return JSON: {"description": "...", "tags": ["tag1", "tag2", ...]}',
+                text: 'Analyze this image and provide a concise description and 5-10 relevant tags (objects, colors, concepts, mood). Return JSON: {"description": "...", "tags": ["tag1", "tag2", ...]}',
               },
               {
                 type: 'image_url',

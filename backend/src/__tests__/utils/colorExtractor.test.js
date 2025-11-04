@@ -3,24 +3,24 @@ import { rgbToHex, extractDominantColors } from '../../utils/colorExtractor.js';
 describe('colorExtractor', () => {
   describe('rgbToHex', () => {
     test('should convert RGB to hex color', () => {
-      expect(rgbToHex([255, 0, 0])).toBe('#FF0000'); // Red
-      expect(rgbToHex([0, 255, 0])).toBe('#00FF00'); // Green
-      expect(rgbToHex([0, 0, 255])).toBe('#0000FF'); // Blue
+      expect(rgbToHex([255, 0, 0])).toBe('#ff0000'); // Red
+      expect(rgbToHex([0, 255, 0])).toBe('#00ff00'); // Green
+      expect(rgbToHex([0, 0, 255])).toBe('#0000ff'); // Blue
     });
 
     test('should handle black and white', () => {
       expect(rgbToHex([0, 0, 0])).toBe('#000000'); // Black
-      expect(rgbToHex([255, 255, 255])).toBe('#FFFFFF'); // White
+      expect(rgbToHex([255, 255, 255])).toBe('#ffffff'); // White
     });
 
     test('should pad single digit hex values', () => {
-      expect(rgbToHex([15, 15, 15])).toBe('#0F0F0F');
+      expect(rgbToHex([15, 15, 15])).toBe('#0f0f0f');
       expect(rgbToHex([1, 2, 3])).toBe('#010203');
     });
 
     test('should handle mid-range colors', () => {
       expect(rgbToHex([128, 128, 128])).toBe('#808080'); // Gray
-      expect(rgbToHex([52, 152, 219])).toBe('#3498DB'); // Blue
+      expect(rgbToHex([52, 152, 219])).toBe('#3498db'); // Blue
     });
   });
 

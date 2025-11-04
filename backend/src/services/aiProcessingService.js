@@ -1,9 +1,9 @@
 /**
  * AI Processing Service - Orchestrates AI analysis workflow
- * Handles image analysis, embedding generation, and database updates
+ * Handles image analysis and database updates
  * Uses fire-and-forget pattern for non-blocking async processing
  */
-import { analyzeImage, generateEmbedding } from './openaiService.js';
+import { analyzeImage } from './openaiService.js';
 import prisma from './prismaClient.js';
 
 /**
@@ -20,10 +20,7 @@ export async function processImageAI(imageId, userId, imageBuffer) {
     // Step 1: Analyze image with GPT-4o Vision
     const { description, tags } = await analyzeImage(imageBuffer);
 
-    // Step 2: Generate embedding for semantic search
-    const embedding = await generateEmbedding(description);
-
-    // Step 3: Update database with AI results
+    // Step 2: Update database with AI results
     await prisma.image_metadata.updateMany({
       where: {
         image_id: imageId,
@@ -32,7 +29,6 @@ export async function processImageAI(imageId, userId, imageBuffer) {
       data: {
         description,
         tags,
-        embedding,
         ai_processing_status: 'completed',
         updated_at: new Date(),
       },
