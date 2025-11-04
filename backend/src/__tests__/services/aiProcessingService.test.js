@@ -2,13 +2,9 @@ import { jest } from '@jest/globals';
 
 // Mock dependencies before importing
 const mockAnalyzeImage = jest.fn();
-const mockGenerateEmbedding = jest.fn();
-const mockGenerateTags = jest.fn();
 
 jest.unstable_mockModule('../../services/openaiService.js', () => ({
   analyzeImage: mockAnalyzeImage,
-  generateEmbedding: mockGenerateEmbedding,
-  generateTags: mockGenerateTags,
 }));
 
 const updateMock = jest.fn();
@@ -46,10 +42,6 @@ describe('aiProcessingService - processImageAI', () => {
       tags: ['sunset', 'ocean', 'nature', 'landscape'],
     });
 
-    mockGenerateEmbedding.mockResolvedValueOnce(
-      Array(1536).fill(0.1) // Mock embedding vector
-    );
-
     // Mock Prisma updateMany
     updateManyMock.mockResolvedValueOnce({ count: 1 });
 
@@ -57,7 +49,6 @@ describe('aiProcessingService - processImageAI', () => {
 
     // Verify OpenAI calls
     expect(mockAnalyzeImage).toHaveBeenCalledWith(mockBuffer);
-    expect(mockGenerateEmbedding).toHaveBeenCalledWith('A beautiful sunset over the ocean');
 
     // Verify database update
     expect(updateManyMock).toHaveBeenCalledWith({
@@ -68,7 +59,6 @@ describe('aiProcessingService - processImageAI', () => {
       data: {
         description: 'A beautiful sunset over the ocean',
         tags: ['sunset', 'ocean', 'nature', 'landscape'],
-        embedding: expect.any(Array),
         ai_processing_status: 'completed',
         updated_at: expect.any(Date),
       },
@@ -196,20 +186,23 @@ describe('aiProcessingService - processImageAI', () => {
       tags: ['mountain', 'landscape'],
     });
 
-    mockGenerateEmbedding.mockRejectedValueOnce(new Error('Embedding failed'));
+    // Mock database update succeeds
+    updateManyMock.mockResolvedValueOnce({ count: 1 });
 
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
     await processImageAI(imageId, userId, mockBuffer);
 
-    // Should still update with description/tags but no embedding
+    // Should successfully update with description/tags
     expect(updateManyMock).toHaveBeenCalledWith({
       where: {
         image_id: imageId,
         user_id: userId
       },
       data: {
-        ai_processing_status: 'failed',
+        description: 'A mountain landscape',
+        tags: ['mountain', 'landscape'],
+        ai_processing_status: 'completed',
         updated_at: expect.any(Date),
       },
     });
@@ -234,8 +227,6 @@ describe('aiProcessingService - processImageAI', () => {
       tags: [],
     });
 
-    mockGenerateEmbedding.mockResolvedValueOnce(Array(1536).fill(0));
-
     updateManyMock.mockResolvedValueOnce({ count: 1 });
 
     await processImageAI(imageId, userId, mockBuffer);
@@ -248,7 +239,6 @@ describe('aiProcessingService - processImageAI', () => {
       data: {
         description: 'An image',
         tags: [],
-        embedding: expect.any(Array),
         ai_processing_status: 'completed',
         updated_at: expect.any(Date),
       },

@@ -6,12 +6,16 @@ import express from 'express';
 const mockUploadImage = jest.fn();
 const mockListImages = jest.fn();
 const mockGetImageById = jest.fn();
+const mockSearchImages = jest.fn();
+const mockFindSimilarToImage = jest.fn();
 const mockProcessImageAI = jest.fn();
 
 jest.unstable_mockModule('../../services/imageService.js', () => ({
   uploadImage: mockUploadImage,
   listImages: mockListImages,
   getImageById: mockGetImageById,
+  searchImages: mockSearchImages,
+  findSimilarToImage: mockFindSimilarToImage,
 }));
 
 jest.unstable_mockModule('../../services/aiProcessingService.js', () => ({
