@@ -142,6 +142,147 @@ export async function listImages({ userId, limit = 20, offset = 0, sort = 'newes
 }
 
 /**
+ * Search images by text (tags/description) and/or color
+ * Enforces user ownership
+ *
+ * @param {Object} params
+ * @param {string} params.userId - User ID for ownership enforcement
+ * @param {string} [params.query] - Text to search in tags or description
+ * @param {string} [params.color] - Hex color to filter by (e.g., '#ff0000')
+ * @param {boolean} [params.dominantOnly=false] - Only search dominant color (not colors array)
+ * @param {number} [params.limit=20] - Max results per page
+ * @param {number} [params.offset=0] - Pagination offset
+ * @param {('newest'|'oldest')} [params.sort='newest'] - Sort order
+ * @returns {Promise<{items: Array, total: number, limit: number, offset: number, hasNext: boolean, hasPrev: boolean, nextOffset: number|null, prevOffset: number|null}>}
+ */
+export async function searchImages({
+  userId,
+  query,
+  color,
+  dominantOnly = false,
+  limit = 20,
+  offset = 0,
+  sort = 'newest',
+}) {
+  // Validate and normalize color if provided
+  if (color) {
+    const colorRegex = /^#[0-9a-f]{6}$/i;
+    if (!colorRegex.test(color)) {
+      throw new Error('Invalid color format. Expected hex color like #ff0000');
+    }
+    color = color.toLowerCase();
+  }
+
+  // Normalize params
+  const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+  const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
+  const orderBy = sort === 'oldest' ? { uploaded_at: 'asc' } : { uploaded_at: 'desc' };
+
+  // Build where clause
+  const where = {
+    user_id: userId,
+  };
+
+  // Build metadata filters
+  const metadataFilters = [];
+
+  // Text search (query in tags OR description)
+  if (query && query.trim()) {
+    metadataFilters.push({
+      OR: [
+        { tags: { has: query.trim() } },
+        { description: { contains: query.trim(), mode: 'insensitive' } },
+      ],
+    });
+  }
+
+  // Color filter
+  if (color) {
+    if (dominantOnly) {
+      // Only search dominant_color
+      metadataFilters.push({
+        dominant_color: color,
+      });
+    } else {
+      // Only search colors array
+      metadataFilters.push({
+        colors: { has: color },
+      });
+    }
+  }
+
+  // Apply metadata filters if any
+  if (metadataFilters.length > 0) {
+    where.image_metadata = {
+      some: metadataFilters.length === 1 ? metadataFilters[0] : { AND: metadataFilters },
+    };
+  }
+
+  // Execute query with count
+  const [total, rows] = await Promise.all([
+    prisma.images.count({ where }),
+    prisma.images.findMany({
+      where,
+      orderBy,
+      take: safeLimit,
+      skip: safeOffset,
+      include: {
+        image_metadata: {
+          select: {
+            description: true,
+            tags: true,
+            colors: true,
+            dominant_color: true,
+            ai_processing_status: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  // Format items (same as listImages)
+  const items = rows.map((img) => {
+    const md = Array.isArray(img.image_metadata) ? img.image_metadata[0] : null;
+    return {
+      id: img.id,
+      user_id: img.user_id,
+      filename: img.filename,
+      original_path: img.original_path,
+      thumbnail_path: img.thumbnail_path,
+      file_size: img.file_size,
+      mime_type: img.mime_type,
+      uploaded_at: img.uploaded_at,
+      metadata: md
+        ? {
+            description: md.description ?? null,
+            tags: md.tags ?? [],
+            colors: md.colors ?? [],
+            dominant_color: md.dominant_color ?? null,
+            ai_processing_status: md.ai_processing_status ?? 'pending',
+          }
+        : null,
+    };
+  });
+
+  // Compute pagination helpers (same as listImages)
+  const hasNext = safeOffset + safeLimit < total;
+  const hasPrev = safeOffset > 0;
+  const nextOffset = hasNext ? safeOffset + safeLimit : null;
+  const prevOffset = hasPrev ? Math.max(0, safeOffset - safeLimit) : null;
+
+  return {
+    items,
+    total,
+    limit: safeLimit,
+    offset: safeOffset,
+    hasNext,
+    hasPrev,
+    nextOffset,
+    prevOffset,
+  };
+}
+
+/**
  * Check for existing filename and generate unique version if needed
  * @param {string} originalName - Original filename
  * @param {string} userId - User ID for ownership

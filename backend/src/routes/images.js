@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { upload } from '../middleware/upload.js';
 import { verifyToken } from '../middleware/auth.js';
-import { uploadImage, listImages, getImageById } from '../services/imageService.js';
+import { uploadImage, listImages, getImageById, searchImages } from '../services/imageService.js';
 import { processImageAI } from '../services/aiProcessingService.js';
 import { supabase } from '../services/supabaseClient.js';
 import prisma from '../services/prismaClient.js';
@@ -109,10 +109,71 @@ router.post('/upload', verifyToken, upload.array('images', 5), async (req, res) 
   });
 });
 
-// GET /api/images/search?q=...&color=...
-router.get('/search', async (_req, res) => {
-  // TODO: Implement full-text search on description/tags and/or filter by color
-  res.status(501).json({ items: [], message: 'Search not implemented yet.' });
+// GET /api/images/search?q=...&color=...&dominantOnly=...&limit=...&offset=...&sort=...
+router.get('/search', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const query = req.query.q;
+    const color = req.query.color;
+    const dominantOnly = req.query.dominantOnly === 'true' ? true : undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit, 10) : NaN;
+    const offsetParam = req.query.offset ? parseInt(req.query.offset, 10) : NaN;
+    const limit = Number.isFinite(limitParam) ? limitParam : 20;
+    const offset = Number.isFinite(offsetParam) ? offsetParam : 0;
+    const sort = req.query.sort === 'oldest' ? 'oldest' : 'newest';
+
+    const result = await searchImages({
+      userId,
+      query,
+      color,
+      dominantOnly,
+      limit,
+      offset,
+      sort,
+    });
+
+    // Build HATEOAS pagination links
+    const buildLink = (newOffset) => {
+      const params = new URLSearchParams();
+      if (query) params.set('q', query);
+      if (color) params.set('color', color);
+      if (dominantOnly) params.set('dominantOnly', 'true');
+      params.set('limit', limit.toString());
+      params.set('offset', newOffset.toString());
+      params.set('sort', sort);
+      return `/api/images/search?${params.toString()}`;
+    };
+
+    const links = {
+      self: buildLink(offset),
+    };
+
+    if (result.hasNext) {
+      links.next = buildLink(result.nextOffset);
+    }
+
+    if (result.hasPrev) {
+      links.prev = buildLink(result.prevOffset);
+    }
+
+    return res.status(200).json({
+      items: result.items,
+      pagination: {
+        total: result.total,
+        limit: result.limit,
+        offset: result.offset,
+        hasNext: result.hasNext,
+        hasPrev: result.hasPrev,
+        links,
+      },
+    });
+  } catch (error) {
+    console.error('Search error:', error);
+    const statusCode = error.message?.includes('Invalid color format') ? 400 : 500;
+    return res.status(statusCode).json({
+      error: error.message?.includes('Invalid color format') ? error.message : 'Search failed',
+    });
+  }
 });
 
 // GET /api/images/:id

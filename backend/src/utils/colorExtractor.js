@@ -1,11 +1,11 @@
 /**
  * Convert RGB array to hex color string
  * @param {Array<number>} rgb - Array of [r, g, b] values (0-255)
- * @returns {string} Hex color string (e.g., "#FF5733")
+ * @returns {string} Hex color string (e.g., "#ff5733")
  */
 export function rgbToHex([r, g, b]) {
   const toHex = (n) => Math.round(n).toString(16).padStart(2, '0');
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toLowerCase();
 }
 
 /**
@@ -36,10 +36,10 @@ export async function extractDominantColors(buffer, colorCount = 5) {
     // Sort by population (how common the color is in the image)
     const sortedSwatches = swatches.sort((a, b) => b.population - a.population);
 
-    // Take top N colors and convert to hex (uppercase)
+    // Take top N colors and convert to hex (lowercase for consistency)
     const colors = sortedSwatches
       .slice(0, colorCount)
-      .map(swatch => swatch.hex.toUpperCase());
+      .map(swatch => swatch.hex.toLowerCase());
 
     return colors;
   } catch (error) {

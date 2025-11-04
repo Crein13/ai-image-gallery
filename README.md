@@ -126,6 +126,8 @@ CREATE POLICY "Users can only see own metadata" ON image_metadata
 🐘 Supabase Setup
 - Create project
 - Enable Auth & Storage
+- Create storage public bucket
+- Configure Storage Policies
 - Run SQL schema (images + image_metadata)
 - Save API keys in .env
 

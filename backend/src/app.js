@@ -3,8 +3,8 @@ import cors from 'cors';
 import 'dotenv/config';
 
 import authRoutes from './routes/auth.js';
-import { listEndpointsForRouter, printEndpoints } from './utils/routePrinter.js';
 import imageRoutes from './routes/images.js';
+import { listEndpointsForRouter, printEndpoints } from './utils/routePrinter.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 const app = express();
