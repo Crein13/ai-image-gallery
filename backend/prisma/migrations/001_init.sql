@@ -1,5 +1,4 @@
 -- Install required PostgreSQL extensions
-CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- Create images table
@@ -26,9 +25,6 @@ CREATE TABLE image_metadata (
   colors VARCHAR(7)[] DEFAULT '{}',
   dominant_color VARCHAR(7),
 
-  -- Semantic search (OpenAI embeddings for "vibe" search)
-  embedding vector(1536),
-
   -- Processing status
   ai_processing_status VARCHAR(20) DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT NOW(),
@@ -44,7 +40,3 @@ CREATE INDEX idx_metadata_image_id ON image_metadata(image_id);
 CREATE INDEX idx_metadata_tags_gin ON image_metadata USING GIN(tags);
 CREATE INDEX idx_metadata_colors_gin ON image_metadata USING GIN(colors);
 CREATE INDEX idx_metadata_description_fts ON image_metadata USING GIN(to_tsvector('english', description));
-
--- Vector similarity index for semantic search
-CREATE INDEX idx_metadata_embedding_ivfflat ON image_metadata
-  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);

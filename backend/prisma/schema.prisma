@@ -6,7 +6,7 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [pg_trgm, uuid_ossp(map: "uuid-ossp", schema: "extensions"), vector]
+  extensions = [pg_trgm, uuid_ossp(map: "uuid-ossp", schema: "extensions")]
   schemas    = ["auth", "public"]
 }
 
@@ -30,22 +30,20 @@ model images {
 
 /// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
 model image_metadata {
-  id                   Int                    @id @default(autoincrement())
+  id                   Int       @id @default(autoincrement())
   image_id             Int
-  user_id              String                 @db.Uuid
+  user_id              String    @db.Uuid
   description          String?
-  tags                 String[]               @default([])
-  colors               String[]               @default([]) @db.VarChar(7)
-  dominant_color       String?                @db.VarChar(7)
-  embedding            Unsupported("vector")?
-  ai_processing_status String?                @default("pending") @db.VarChar(20)
-  created_at           DateTime?              @default(now()) @db.Timestamp(6)
-  updated_at           DateTime?              @default(now()) @updatedAt @db.Timestamp(6)
-  image                images                 @relation(fields: [image_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users                users                  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tags                 String[]  @default([])
+  colors               String[]  @default([]) @db.VarChar(7)
+  dominant_color       String?   @db.VarChar(7)
+  ai_processing_status String?   @default("pending") @db.VarChar(20)
+  created_at           DateTime? @default(now()) @db.Timestamp(6)
+  updated_at           DateTime? @default(now()) @updatedAt @db.Timestamp(6)
+  image                images    @relation(fields: [image_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([colors], map: "idx_metadata_colors_gin", type: Gin)
-  @@index([embedding], map: "idx_metadata_embedding_ivfflat")
   @@index([image_id], map: "idx_metadata_image_id")
   @@index([tags], map: "idx_metadata_tags_gin", type: Gin)
   @@index([user_id], map: "idx_metadata_user_id")
