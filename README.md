@@ -133,7 +133,7 @@ CREATE POLICY "Users can only see own metadata" ON image_metadata
 
 🧩 Backend Setup (Express)
 - npm init
-- Install deps: express, dotenv, axios, cors, openai, @prisma/client, multer, sharp, color-thief-node, supabase-js
+- Install deps: express, dotenv, axios, cors, openai, @prisma/client, multer, sharp, node-vibrant, supabase-js
 - Configure Supabase client + Prisma
 - Implement image upload and thumbnail generator
 - Add OpenAI tagging route

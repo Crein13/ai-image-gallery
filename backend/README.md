@@ -1,15 +1,15 @@
 # AI Image Gallery - Backend API
 
-Express.js REST API for the AI Image Gallery application. Handles image uploads, AI-powered metadata generation using OpenAI GPT-4o, and provides endpoints for authentication and image management.
+Express.js REST API for the AI Image Gallery application. Handles image uploads, AI-powered metadata generation using OpenAI GPT-4o, and provides endpoints for authentication, search, and image management.
 
 ## 🎯 Overview
 
 This backend provides:
 - **Authentication**: User signup/signin via Supabase Auth (JWT-based)
 - **Image Upload**: Multi-file upload with automatic thumbnail generation and color extraction
-- **AI Processing**: Background processing using OpenAI GPT-4o for tags, descriptions, and embeddings
+ - **AI Processing**: Background processing using OpenAI GPT-4o for tags and descriptions
 - **Image Management**: CRUD operations with pagination and HATEOAS links
-- **Search**: Text and semantic search capabilities (planned)
+ - **Search**: Text search (fuzzy) and "find similar" by tags/colors (implemented)
 - **Security**: Row-level security, ownership enforcement, input validation
 
 ## 🏗️ Architecture
@@ -108,8 +108,8 @@ npx prisma generate
 1. Go to your Supabase project dashboard
 2. Navigate to **Storage**
 3. Create a bucket named `ai-image-gallery`
-4. Set it as **Public** bucket
-5. Configure Storage Policies (see [Database Schema](#-database-schema) section)
+4. Choose visibility: Public (simple, use getPublicUrl) or Private (use signed URLs)
+5. Configure Storage Policies (see examples below)
 
 #### Run SQL Schema
 
@@ -216,9 +216,16 @@ Pushes schema changes to the database without creating migrations (useful for pr
 - **GET** `/api/images/:id` - Get single image by ID
 - **POST** `/api/images/:imageId/retry-ai` - Manually retry AI processing
 
-### Search (Planned)
+### Search
 
-- **GET** `/api/images/search` - Search images by text or semantic similarity
+- **GET** `/api/images/search` - Search images by text and/or color
+    - When only `query` is provided, uses a PostgreSQL stored procedure (`search_images_by_tags`) for fuzzy matching (pg_trgm)
+    - When `color` is provided (with or without `query`), uses Prisma with GIN indexes (fast array lookups)
+    - Query params: `query`, `color` (hex), `dominantOnly` (boolean), `limit`, `offset`, `sort` ('newest' | 'oldest')
+
+- **GET** `/api/images/:id/similar` - Find images similar to a given image (shared tags or colors)
+    - Excludes the source image
+    - Uses simple tag/color overlap per requirements (no vector DB)
 
 ## 🗄️ Database Schema
 
@@ -247,12 +254,11 @@ Stores AI-generated metadata and processing status.
 - user_id (UUID, foreign key to auth.users)
 - description (TEXT)
 - tags (TEXT[])
-- colors (VARCHAR[])
-- dominant_color (VARCHAR)
-- embedding (vector(1536))
-- ai_processing_status (VARCHAR)
-- created_at (TIMESTAMP)
-- updated_at (TIMESTAMP)
+ - colors (VARCHAR(7)[])
+ - dominant_color (VARCHAR(7))
+ - ai_processing_status (VARCHAR)
+ - created_at (TIMESTAMP)
+ - updated_at (TIMESTAMP)
 ```
 
 ### Row Level Security (RLS)
@@ -378,7 +384,6 @@ backend/
 | **Prisma** | Type-safe ORM |
 | **Supabase** | PostgreSQL database, Storage, Auth |
 | **OpenAI GPT-4o** | Image analysis (tags, descriptions) |
-| **OpenAI Embeddings** | Semantic search vectors |
 | **Sharp** | Image thumbnail generation |
 | **node-vibrant** | Color extraction |
 | **Multer** | File upload handling |
