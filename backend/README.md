@@ -1,24 +1,24 @@
 # AI Image Gallery - Backend API
 
-Express.js REST API for the AI Image Gallery application. Handles image uploads, AI-powered metadata generation using OpenAI GPT-4o, and provides endpoints for authentication, search, and image management.
+Express.js REST API for the AI Image Gallery application. This backend handles image uploads, AI-powered metadata generation using OpenAI Vision API, and provides secure endpoints for authentication, search, and image management.
 
-## 🎯 Overview
+## 🎯 What This Backend Does
 
-This backend provides:
-- **Authentication**: User signup/signin via Supabase Auth (JWT-based)
-- **Image Upload**: Multi-file upload with automatic thumbnail generation and color extraction
- - **AI Processing**: Background processing using OpenAI GPT-4o for tags and descriptions
-- **Image Management**: CRUD operations with pagination and HATEOAS links
- - **Search**: Text search (fuzzy) and "find similar" by tags/colors (implemented)
-- **Security**: Row-level security, ownership enforcement, input validation
+This Express.js backend provides:
+- **User Authentication**: Sign up/sign in via Supabase Auth with JWT tokens
+- **Image Upload & Storage**: Multi-file upload with automatic thumbnail generation and color extraction
+- **AI-Powered Analysis**: Background processing using OpenAI GPT-4o for automatic tags, descriptions, and colors
+- **Smart Search**: Text search by tags/descriptions and color-based filtering
+- **Similar Image Discovery**: Find images with shared tags or colors
+- **Secure Access**: Row-level security ensuring users only see their own images
 
-## 🏗️ Architecture
+## 🏗️ Backend Architecture
 
-- **Service-Based Architecture**: Routes delegate to services for business logic
-- **Asynchronous AI Processing**: Non-blocking background processing
-- **Test-Driven Development**: Comprehensive test coverage with Jest
-- **Database**: Prisma ORM with Supabase PostgreSQL
-- **Storage**: Supabase Storage for images (originals + thumbnails)
+- **Service-Based Design**: Clean separation between HTTP routes and business logic
+- **Asynchronous AI Processing**: Upload completes immediately, AI analysis happens in background
+- **Test-Driven Development**: Comprehensive Jest test suite with 95+ tests
+- **Database**: Prisma ORM with Supabase PostgreSQL for type-safe queries
+- **File Storage**: Supabase Storage for original images and auto-generated thumbnails
 
 ## 📋 Prerequisites
 
@@ -74,20 +74,20 @@ OPENAI_API_KEY="<your-openai-api-key>"
 
 #### Getting Your Supabase Credentials:
 
-1. Go to [supabase.com](https://supabase.com) and create a project
-2. Navigate to **Settings** → **API**
-   - Copy `URL` to `SUPABASE_URL`
-   - Copy `service_role` key to `SUPABASE_SERVICE_ROLE_KEY`
-3. Navigate to **Settings** → **Database**
-   - Copy the **Connection Pooling** connection string to `DATABASE_URL`
+1. Create a new project at [supabase.com](https://supabase.com)
+2. Go to **Settings** → **API**:
+   - Copy the `URL` to `SUPABASE_URL`
+   - Copy the `service_role` key to `SUPABASE_SERVICE_ROLE_KEY`
+3. Go to **Settings** → **Database**:
+   - Copy the **Connection Pooling** string to `DATABASE_URL`
    - Copy the **Direct Connection** string to `DIRECT_URL`
-4. Set `SUPABASE_BUCKET` to `ai-image-gallery` (you'll create this bucket in step 4)
+4. Set `SUPABASE_BUCKET` to `ai-image-gallery` (you'll create this in step 4)
 
 #### Getting Your OpenAI API Key:
 
-1. Go to [platform.openai.com](https://platform.openai.com)
-2. Navigate to **API Keys**
-3. Create a new key and copy it to `OPENAI_API_KEY`
+1. Sign up/log in at [platform.openai.com](https://platform.openai.com)
+2. Go to **API Keys** section
+3. Create a new secret key and copy it to `OPENAI_API_KEY`
 
 ### 4. Database Setup
 
@@ -105,11 +105,10 @@ npx prisma generate
 
 #### Create Supabase Storage Bucket
 
-1. Go to your Supabase project dashboard
-2. Navigate to **Storage**
-3. Create a bucket named `ai-image-gallery`
-4. Choose visibility: Public (simple, use getPublicUrl) or Private (use signed URLs)
-5. Configure Storage Policies (see examples below)
+1. In your Supabase project dashboard, go to **Storage**
+2. Create a new bucket named `ai-image-gallery`
+3. Set visibility to Public or Private based on your needs
+4. Configure bucket policies for user-based access (see Storage Policies section below)
 
 #### Run SQL Schema
 
@@ -122,6 +121,8 @@ CREATE TABLE images (
     filename VARCHAR(255),
     original_path TEXT,
     thumbnail_path TEXT,
+    file_size INTEGER,
+    mime_type VARCHAR(100),
     uploaded_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -132,23 +133,23 @@ CREATE TABLE image_metadata (
     description TEXT,
     tags TEXT[],
     colors VARCHAR(7)[],
-    ai_processing_status VARCHAR(20),
-    created_at TIMESTAMP DEFAULT NOW()
+    dominant_color VARCHAR(7),
+    ai_processing_status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- Enable RLS
+-- Enable Row Level Security
 ALTER TABLE images ENABLE ROW LEVEL SECURITY;
 ALTER TABLE image_metadata ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies
-CREATE POLICY "Users can only see own images" ON images
+-- Create RLS Policies
+CREATE POLICY "Users can only access own images" ON images
     FOR ALL USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can only see own metadata" ON image_metadata
+CREATE POLICY "Users can only access own metadata" ON image_metadata
     FOR ALL USING (auth.uid() = user_id);
 ```
-
-**Note**: The actual database schema has been extended with additional fields (see `prisma/migrations/` for the complete schema with `file_size`, `mime_type`, `dominant_color`, `embedding`, etc.).
 
 ### 5. Start Development Server
 
@@ -201,31 +202,25 @@ npx prisma db push
 ```
 Pushes schema changes to the database without creating migrations (useful for prototyping).
 
-## 📡 API Endpoints
+## 📡 REST API Endpoints
 
 ### Authentication
+- **POST** `/api/auth/signup` - Create new user account with email/password
+- **POST** `/api/auth/signin` - Authenticate user and receive JWT tokens
 
-- **POST** `/api/auth/signup` - Create new user account
-- **POST** `/api/auth/signin` - Authenticate user and get JWT token
+### Image Management
+- **POST** `/api/images/upload` - Upload 1-5 images with automatic processing
+- **GET** `/api/images` - Get paginated list of user's images with metadata
+  - Query params: `limit`, `offset`, `sort` ('newest' | 'oldest')
+- **GET** `/api/images/:id` - Get single image with full metadata
+- **POST** `/api/images/:imageId/retry-ai` - Retry AI processing for failed images
 
-### Images
-
-- **POST** `/api/images/upload` - Upload one or more images (max 5)
-- **GET** `/api/images` - Get paginated list of user's images
-  - Query params: `limit` (default: 20), `offset` (default: 0), `sort` ('newest' | 'oldest')
-- **GET** `/api/images/:id` - Get single image by ID
-- **POST** `/api/images/:imageId/retry-ai` - Manually retry AI processing
-
-### Search
-
-- **GET** `/api/images/search` - Search images by text and/or color
-    - When only `query` is provided, uses a PostgreSQL stored procedure (`search_images_by_tags`) for fuzzy matching (pg_trgm)
-    - When `color` is provided (with or without `query`), uses Prisma with GIN indexes (fast array lookups)
-    - Query params: `query`, `color` (hex), `dominantOnly` (boolean), `limit`, `offset`, `sort` ('newest' | 'oldest')
-
-- **GET** `/api/images/:id/similar` - Find images similar to a given image (shared tags or colors)
-    - Excludes the source image
-    - Uses simple tag/color overlap per requirements (no vector DB)
+### Search & Discovery
+- **GET** `/api/images/search` - Search images by text query and/or color filter
+  - Query params: `query` (text), `color` (hex), `dominantOnly`, `limit`, `offset`, `sort`
+  - Supports fuzzy text matching and exact color filtering
+- **GET** `/api/images/:id/similar` - Find images with similar tags or colors
+- **GET** `/api/images/colors` - Get all unique colors from user's images
 
 ## 🗄️ Database Schema
 
@@ -372,25 +367,130 @@ backend/
 ├── .env.example             # Example environment file
 ├── jest.config.js           # Jest configuration
 ├── package.json
-├── IMPLEMENTATION.md        # Detailed implementation docs
 └── README.md                # This file
 ```
 
-## 🔧 Tech Stack
+## 🧩 Backend Tech Stack
 
 | Technology | Purpose |
 |------------|---------|
-| **Express.js 5** | Web framework |
-| **Prisma** | Type-safe ORM |
-| **Supabase** | PostgreSQL database, Storage, Auth |
-| **OpenAI GPT-4o** | Image analysis (tags, descriptions) |
-| **Sharp** | Image thumbnail generation |
-| **node-vibrant** | Color extraction |
-| **Multer** | File upload handling |
-| **Jest** | Testing framework |
-| **Supertest** | HTTP testing |
+| **Express.js** | REST API web framework |
+| **Prisma** | Type-safe ORM for database operations |
+| **Supabase** | PostgreSQL database, file storage, and authentication |
+| **OpenAI GPT-4o Vision** | AI image analysis for tags, descriptions, and colors |
+| **Sharp** | Fast thumbnail generation and image processing |
+| **node-vibrant** | Dominant color extraction from images |
+| **Multer** | Multipart/form-data file upload handling |
+| **Jest** | Unit and integration testing framework |
+| **Supertest** | HTTP endpoint testing |
 
-## 🐛 Troubleshooting
+## � Search Internals
+
+### Text Search (Fuzzy)
+- **Stored Procedure**: `search_images_by_tags(search_term text, user_filter uuid)`
+- **Location**: `prisma/migrations/003_search_functions.sql`
+- **Uses**: `pg_trgm` similarity and full-text index to rank results
+- **Best For**: Human-friendly search with typo tolerance (e.g., "beach" matches "beaches")
+
+### Color and Combined Filters
+- **Method**: Prisma queries with GIN indexes on `tags` and `colors` arrays
+- **Logic**: AND logic for combined filters (`query + color`)
+- **Performance**: ~5-15ms for color-only, ~15-30ms for combined
+
+### Similar Images
+- **Algorithm**: Simple tag/color overlap scoring
+- **Implementation**: Counts matching tags and colors between images
+- **Performance**: ~10-20ms typical query time
+
+## 🗄️ Storage Policies
+
+Your folder structure: `originals/{userId}/...` and `thumbnails/{userId}/...`
+
+### Owner-Only (Private Bucket)
+
+Use this if you want files to be private and accessible only by the owner (or via signed URLs):
+
+```sql
+-- Enable RLS
+alter table storage.objects enable row level security;
+
+-- Owners can read their files
+create policy "Owners can read files (by folder)"
+on storage.objects for select to authenticated
+using (
+  (bucket_id = 'ai-image-gallery'::text)
+  and ((storage.foldername(name))[1] = auth.uid()::text)
+);
+
+-- Owners can upload files
+create policy "Owners can upload files (by folder)"
+on storage.objects for insert to authenticated
+with check (
+  (bucket_id = 'ai-image-gallery'::text)
+  and ((storage.foldername(name))[1] = auth.uid()::text)
+);
+
+-- Owners can update their files
+create policy "Owners can update files (by folder)"
+on storage.objects for update to authenticated
+using (
+  (bucket_id = 'ai-image-gallery'::text)
+  and ((storage.foldername(name))[1] = auth.uid()::text)
+)
+with check (
+  (bucket_id = 'ai-image-gallery'::text)
+  and ((storage.foldername(name))[1] = auth.uid()::text)
+);
+
+-- Owners can delete their files
+create policy "Owners can delete files (by folder)"
+on storage.objects for delete to authenticated
+using (
+  (bucket_id = 'ai-image-gallery'::text)
+  and ((storage.foldername(name))[1] = auth.uid()::text)
+);
+```
+
+### Public Read (Entire Bucket)
+
+Use this if you want images publicly accessible via `getPublicUrl`:
+
+```sql
+-- Make bucket public
+update storage.buckets set public = true where id = 'ai-image-gallery';
+
+-- Public read for entire bucket
+create policy "Public read"
+on storage.objects for select to public
+using (bucket_id = 'ai-image-gallery'::text);
+
+-- Owner-only write (use same insert/update/delete policies as above)
+```
+
+### Public Thumbnails Only
+
+Use this if you want only thumbnails public (keep originals private):
+
+```sql
+-- Keep bucket private
+update storage.buckets set public = false where id = 'ai-image-gallery';
+
+-- Public read for thumbnails only
+create policy "Public read for thumbnails only"
+on storage.objects for select to public
+using (
+  (bucket_id = 'ai-image-gallery'::text)
+  and ((storage.foldername(name))[1] = 'thumbnails')
+);
+
+-- Owner-only read for originals (use authenticated policies above)
+```
+
+**Note**: `storage.foldername(name)` returns an array of folder segments. For path `originals/user-123/file.jpg`:
+- `[1]` = "originals"
+- `[2]` = "user-123"
+
+## �🐛 Troubleshooting
 
 ### Port Already in Use
 
@@ -440,10 +540,10 @@ npx jest --clearCache
 npm test -- --verbose
 ```
 
-## 📚 Additional Documentation
+## 📚 Related Documentation
 
-- **[Main README](../README.md)** - Full-stack project overview
-- **[Prisma Schema](./prisma/schema.prisma)** - Database schema definition
+- **[Main README](../README.md)** - Full-stack project overview and setup
+- **[Prisma Schema](./prisma/schema.prisma)** - Complete database schema definition
 
 ## 🚀 Deployment
 
