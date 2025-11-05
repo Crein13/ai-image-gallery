@@ -72,35 +72,36 @@ export async function getImageById({ imageId, userId }) {
  * @returns {Promise<{items: Array, total: number, limit: number, offset: number}>}
  */
 export async function listImages({ userId, limit = 20, offset = 0, sort = 'newest' }) {
-  // Normalize params
-  const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
-  const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
-  const orderBy = sort === 'oldest' ? { uploaded_at: 'asc' } : { uploaded_at: 'desc' };
+  try {
+    // Normalize params
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+    const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
+    const orderBy = sort === 'oldest' ? { uploaded_at: 'asc' } : { uploaded_at: 'desc' };
 
-  const where = { user_id: userId };
+    const where = { user_id: userId };
 
-  const [total, rows] = await Promise.all([
-    prisma.images.count({ where }),
-    prisma.images.findMany({
-      where,
-      orderBy,
-      take: safeLimit,
-      skip: safeOffset,
-      include: {
-        image_metadata: {
-          select: {
-            description: true,
-            tags: true,
-            colors: true,
-            dominant_color: true,
-            ai_processing_status: true,
+    const [total, rows] = await Promise.all([
+      prisma.images.count({ where }),
+      prisma.images.findMany({
+        where,
+        orderBy,
+        take: safeLimit,
+        skip: safeOffset,
+        include: {
+          image_metadata: {
+            select: {
+              description: true,
+              tags: true,
+              colors: true,
+              dominant_color: true,
+              ai_processing_status: true,
+            },
           },
         },
-      },
-    }),
-  ]);
+      }),
+    ]);
 
-  const items = rows.map((img) => {
+    const items = rows.map((img) => {
     const md = Array.isArray(img.image_metadata) ? img.image_metadata[0] : null;
     return {
       id: img.id,
@@ -123,28 +124,42 @@ export async function listImages({ userId, limit = 20, offset = 0, sort = 'newes
     };
   });
 
-  // Compute pagination helpers
-  const hasNext = safeOffset + safeLimit < total;
-  const hasPrev = safeOffset > 0;
-  const nextOffset = hasNext ? safeOffset + safeLimit : null;
-  const prevOffset = hasPrev ? Math.max(0, safeOffset - safeLimit) : null;
+    // Compute pagination helpers
+    const hasNext = safeOffset + safeLimit < total;
+    const hasPrev = safeOffset > 0;
+    const nextOffset = hasNext ? safeOffset + safeLimit : null;
+    const prevOffset = hasPrev ? Math.max(0, safeOffset - safeLimit) : null;
 
-  return {
-    items,
-    total,
-    limit: safeLimit,
-    offset: safeOffset,
-    hasNext,
-    hasPrev,
-    nextOffset,
-    prevOffset,
-  };
+    return {
+      items,
+      total,
+      limit: safeLimit,
+      offset: safeOffset,
+      hasNext,
+      hasPrev,
+      nextOffset,
+      prevOffset,
+    };
+  } catch (error) {
+    console.error('Error in listImages:', error);
+    // Return empty result on error instead of throwing
+    return {
+      items: [],
+      total: 0,
+      limit: safeLimit || 20,
+      offset: safeOffset || 0,
+      hasNext: false,
+      hasPrev: false,
+      nextOffset: null,
+      prevOffset: null,
+    };
+  }
 }
 
 /**
  * Search images by text (tags/description) and/or color
  * Enforces user ownership
- * Uses PostgreSQL stored procedure for fuzzy tag matching when text search is provided
+ * Uses Prisma queries for exact and partial matching
  *
  * @param {Object} params
  * @param {string} params.userId - User ID for ownership enforcement
@@ -153,7 +168,7 @@ export async function listImages({ userId, limit = 20, offset = 0, sort = 'newes
  * @param {boolean} [params.dominantOnly=false] - Only search dominant color (not colors array)
  * @param {number} [params.limit=20] - Max results per page
  * @param {number} [params.offset=0] - Pagination offset
- * @param {('newest'|'oldest'|'relevance')} [params.sort='newest'] - Sort order (relevance only works with text query)
+ * @param {('newest'|'oldest')} [params.sort='newest'] - Sort order
  * @returns {Promise<{items: Array, total: number, limit: number, offset: number, hasNext: boolean, hasPrev: boolean, nextOffset: number|null, prevOffset: number|null}>}
  */
 export async function searchImages({
@@ -178,112 +193,7 @@ export async function searchImages({
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
   const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
 
-  // If we have a text query and no color filter, use the stored procedure for better fuzzy matching
-  if (query && query.trim() && !color && sort !== 'oldest') {
-    // Use PostgreSQL stored procedure for fuzzy tag/description search
-    const searchResults = await prisma.$queryRaw`
-      SELECT
-        im.id,
-        im.image_id,
-        im.description,
-        im.tags,
-        im.colors,
-        im.dominant_color,
-        im.ai_processing_status,
-        im.match_score
-      FROM search_images_by_tags(${query.trim()}, ${userId}::uuid) AS im
-      ORDER BY im.match_score DESC
-      LIMIT ${safeLimit}
-      OFFSET ${safeOffset}
-    `;
-
-    // Get total count for pagination
-    const countResult = await prisma.$queryRaw`
-      SELECT COUNT(*) as count
-      FROM search_images_by_tags(${query.trim()}, ${userId}::uuid)
-    `;
-    const total = Number(countResult[0]?.count || 0);
-
-    // Fetch full image records for the matched metadata
-    const imageIds = searchResults.map((r) => r.image_id);
-
-    if (imageIds.length === 0) {
-      return {
-        items: [],
-        total: 0,
-        limit: safeLimit,
-        offset: safeOffset,
-        hasNext: false,
-        hasPrev: false,
-        nextOffset: null,
-        prevOffset: null,
-      };
-    }
-
-    const images = await prisma.images.findMany({
-      where: {
-        id: { in: imageIds },
-        user_id: userId,
-      },
-      include: {
-        image_metadata: {
-          select: {
-            description: true,
-            tags: true,
-            colors: true,
-            dominant_color: true,
-            ai_processing_status: true,
-          },
-        },
-      },
-    });
-
-    // Map results maintaining order from search_images_by_tags
-    const imageMap = new Map(images.map((img) => [img.id, img]));
-    const items = imageIds
-      .map((id) => imageMap.get(id))
-      .filter(Boolean)
-      .map((img) => {
-        const md = Array.isArray(img.image_metadata) ? img.image_metadata[0] : null;
-        return {
-          id: img.id,
-          user_id: img.user_id,
-          filename: img.filename,
-          original_path: img.original_path,
-          thumbnail_path: img.thumbnail_path,
-          file_size: img.file_size,
-          mime_type: img.mime_type,
-          uploaded_at: img.uploaded_at,
-          metadata: md
-            ? {
-                description: md.description ?? null,
-                tags: md.tags ?? [],
-                colors: md.colors ?? [],
-                dominant_color: md.dominant_color ?? null,
-                ai_processing_status: md.ai_processing_status ?? 'pending',
-              }
-            : null,
-        };
-      });
-
-    const hasNext = safeOffset + safeLimit < total;
-    const hasPrev = safeOffset > 0;
-    const nextOffset = hasNext ? safeOffset + safeLimit : null;
-    const prevOffset = hasPrev ? Math.max(0, safeOffset - safeLimit) : null;
-
-    return {
-      items,
-      total,
-      limit: safeLimit,
-      offset: safeOffset,
-      hasNext,
-      hasPrev,
-      nextOffset,
-      prevOffset,
-    };
-  }
-
-  // Fallback to Prisma queries for color-only or combined searches
+  // Use Prisma queries for all searches
   const orderBy = sort === 'oldest' ? { uploaded_at: 'asc' } : { uploaded_at: 'desc' };
 
   // Build where clause
@@ -294,12 +204,19 @@ export async function searchImages({
   // Build metadata filters
   const metadataFilters = [];
 
-  // Text search (query in tags OR description) - exact match or case-insensitive contains
+  // Text search (query in tags OR description) - case-insensitive matching
   if (query && query.trim()) {
     metadataFilters.push({
       OR: [
+        // Exact match in tags array
         { tags: { has: query.trim() } },
-        { description: { contains: query.trim(), mode: 'insensitive' } },
+        // Case-insensitive contains in description
+        {
+          description: {
+            contains: query.trim(),
+            mode: 'insensitive'
+          }
+        },
       ],
     });
   }
@@ -680,34 +597,28 @@ export async function findSimilarToImage({ imageId, userId, limit = 20 }) {
     },
   });
 
-  // Format results
+  // Format results (same format as other functions)
   const formattedImages = similarImages.map((image) => {
     const md = Array.isArray(image.image_metadata) ? image.image_metadata[0] : null;
-
-    const { data: originalData } = supabase.storage
-      .from('images')
-      .getPublicUrl(image.original_path);
-
-    const { data: thumbData } = supabase.storage
-      .from('images')
-      .getPublicUrl(image.thumbnail_path);
 
     return {
       id: image.id,
       user_id: image.user_id,
       filename: image.filename,
-      original_url: originalData.publicUrl,
-      thumbnail_url: thumbData.publicUrl,
+      original_path: image.original_path,
+      thumbnail_path: image.thumbnail_path,
       file_size: image.file_size,
       mime_type: image.mime_type,
       uploaded_at: image.uploaded_at,
-      metadata: md ? {
-        description: md.description,
-        tags: md.tags,
-        colors: md.colors,
-        dominant_color: md.dominant_color,
-        ai_processing_status: md.ai_processing_status,
-      } : null,
+      metadata: md
+        ? {
+            description: md.description ?? null,
+            tags: md.tags ?? [],
+            colors: md.colors ?? [],
+            dominant_color: md.dominant_color ?? null,
+            ai_processing_status: md.ai_processing_status ?? 'pending',
+          }
+        : null,
     };
   });
 
@@ -715,5 +626,134 @@ export async function findSimilarToImage({ imageId, userId, limit = 20 }) {
     items: formattedImages,
     total: formattedImages.length,
     limit,
+  };
+}
+
+/**
+ * Get distinct colors from user's images
+ * @param {Object} params
+ * @param {string} params.userId - ID of the user
+ * @param {number} [params.limit=20] - Maximum number of colors to return
+ * @returns {Promise<Object>} Object with colors array and total count
+ */
+export async function getDistinctColors({ userId, limit = 20 }) {
+  try {
+    // Get all unique colors from user's images
+    const result = await prisma.image_metadata.findMany({
+      where: {
+        user_id: userId,
+        ai_processing_status: 'completed',
+        OR: [
+          { colors: { not: { equals: [] } } },
+          { dominant_color: { not: null } }
+        ]
+      },
+      select: {
+        colors: true,
+        dominant_color: true
+      }
+    });
+
+    // Collect all unique colors
+    const colorSet = new Set();
+
+    if (result && Array.isArray(result)) {
+      result.forEach(metadata => {
+        // Add colors from the colors array
+        if (metadata.colors && Array.isArray(metadata.colors)) {
+          metadata.colors.forEach(color => {
+            if (color && typeof color === 'string' && color.match(/^#[0-9A-Fa-f]{6}$/)) { // Valid hex color
+              colorSet.add(color.toLowerCase());
+            }
+          });
+        }
+
+        // Add dominant color
+        if (metadata.dominant_color && typeof metadata.dominant_color === 'string' && metadata.dominant_color.match(/^#[0-9A-Fa-f]{6}$/)) {
+          colorSet.add(metadata.dominant_color.toLowerCase());
+        }
+      });
+    }
+
+    // Convert to array
+    const colors = Array.from(colorSet);
+
+    return {
+      colors: colors.slice(0, limit),
+      total: colors.length
+    };
+  } catch (error) {
+    console.error('Error in getDistinctColors:', error);
+    // Return empty result on error instead of throwing
+    return {
+      colors: [],
+      total: 0
+    };
+  }
+}
+
+/**
+ * Retry AI processing for an image
+ * @param {Object} params
+ * @param {number} params.imageId - ID of the image
+ * @param {string} params.userId - ID of the user
+ * @returns {Promise<Object>} Processing result
+ */
+export async function retryAIProcessing({ imageId, userId }) {
+  // Check if image exists and belongs to user
+  const image = await prisma.images.findFirst({
+    where: {
+      id: imageId,
+      user_id: userId,
+    },
+  });
+
+  if (!image) {
+    const error = new Error('Image not found');
+    error.status = 404;
+    throw error;
+  }
+
+  // Check metadata status
+  const metadata = await prisma.image_metadata.findFirst({
+    where: { image_id: imageId },
+  });
+
+  if (!metadata) {
+    const error = new Error('Image metadata not found');
+    error.status = 404;
+    throw error;
+  }
+
+  if (metadata.ai_processing_status === 'completed') {
+    const error = new Error('AI processing already completed');
+    error.status = 400;
+    throw error;
+  }
+
+  // Download original image from storage
+  const { data: fileData, error: downloadError } = await supabase.storage
+    .from(process.env.SUPABASE_BUCKET)
+    .download(image.original_path);
+
+  if (downloadError || !fileData) {
+    const error = new Error('Failed to download image from storage');
+    error.status = 500;
+    throw error;
+  }
+
+  // Convert blob to buffer
+  const arrayBuffer = await fileData.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  // Trigger AI processing (fire-and-forget)
+  processImageAI(image.id, userId, buffer).catch((err) => {
+    console.error('AI retry processing failed:', err);
+  });
+
+  return {
+    success: true,
+    message: 'AI processing retry initiated',
+    image_id: image.id,
   };
 }

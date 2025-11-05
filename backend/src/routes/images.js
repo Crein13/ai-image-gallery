@@ -1,10 +1,16 @@
 import { Router } from 'express';
 import { upload } from '../middleware/upload.js';
 import { verifyToken } from '../middleware/auth.js';
-import { uploadImage, listImages, getImageById, searchImages, findSimilarToImage } from '../services/imageService.js';
-import { processImageAI } from '../services/aiProcessingService.js';
-import { supabase } from '../services/supabaseClient.js';
-import prisma from '../services/prismaClient.js';
+import {
+  uploadImage,
+  listImages,
+  getImageById,
+  searchImages,
+  findSimilarToImage,
+  getDistinctColors,
+  retryAIProcessing
+} from '../services/imageService.js';
+import { buildPaginationLinks, buildPaginatedResponse } from '../utils/hateoas.js';
 
 const router = Router();
 
@@ -21,36 +27,21 @@ router.get('/', verifyToken, async (req, res) => {
     const result = await listImages({ userId, limit, offset, sort });
 
     // Build HATEOAS pagination links
-    const basePath = '/api/images';
-    const buildLink = (newOffset) =>
-      `${basePath}?limit=${result.limit}&offset=${newOffset}&sort=${sort}`;
-
-    const links = {
-      self: buildLink(result.offset),
-    };
-
-    if (result.hasNext) {
-      links.next = buildLink(result.nextOffset);
-    }
-
-    if (result.hasPrev) {
-      links.prev = buildLink(result.prevOffset);
-    }
+    const links = buildPaginationLinks({
+      basePath: '/api/images',
+      result,
+      sort,
+    });
 
     // Return HATEOAS-compliant response
-    return res.status(200).json({
+    return res.status(200).json(buildPaginatedResponse({
       items: result.items,
-      pagination: {
-        total: result.total,
-        limit: result.limit,
-        offset: result.offset,
-        hasNext: result.hasNext,
-        hasPrev: result.hasPrev,
-        links,
-      },
-    });
+      result,
+      links,
+    }));
   } catch (error) {
     console.error('List images error:', error);
+    console.error('Error stack:', error.stack);
     return res.status(500).json({ error: 'Failed to list images' });
   }
 });
@@ -113,7 +104,7 @@ router.post('/upload', verifyToken, upload.array('images', 5), async (req, res) 
 router.get('/search', verifyToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const query = req.query.q;
+    const query = req.query.q || req.query.query; // Accept both 'q' and 'query' parameters
     const color = req.query.color;
     const dominantOnly = req.query.dominantOnly === 'true' ? true : undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit, 10) : NaN;
@@ -133,46 +124,45 @@ router.get('/search', verifyToken, async (req, res) => {
     });
 
     // Build HATEOAS pagination links
-    const buildLink = (newOffset) => {
-      const params = new URLSearchParams();
-      if (query) params.set('q', query);
-      if (color) params.set('color', color);
-      if (dominantOnly) params.set('dominantOnly', 'true');
-      params.set('limit', limit.toString());
-      params.set('offset', newOffset.toString());
-      params.set('sort', sort);
-      return `/api/images/search?${params.toString()}`;
-    };
+    const queryParams = {};
+    if (query) queryParams.q = query;
+    if (color) queryParams.color = color;
+    if (dominantOnly) queryParams.dominantOnly = 'true';
 
-    const links = {
-      self: buildLink(offset),
-    };
-
-    if (result.hasNext) {
-      links.next = buildLink(result.nextOffset);
-    }
-
-    if (result.hasPrev) {
-      links.prev = buildLink(result.prevOffset);
-    }
-
-    return res.status(200).json({
-      items: result.items,
-      pagination: {
-        total: result.total,
-        limit: result.limit,
-        offset: result.offset,
-        hasNext: result.hasNext,
-        hasPrev: result.hasPrev,
-        links,
-      },
+    const links = buildPaginationLinks({
+      basePath: '/api/images/search',
+      result,
+      sort,
+      queryParams,
     });
+
+    return res.status(200).json(buildPaginatedResponse({
+      items: result.items,
+      result,
+      links,
+    }));
   } catch (error) {
     console.error('Search error:', error);
     const statusCode = error.message?.includes('Invalid color format') ? 400 : 500;
     return res.status(statusCode).json({
       error: error.message?.includes('Invalid color format') ? error.message : 'Search failed',
     });
+  }
+});
+
+// GET /api/images/colors - Get distinct colors from user's images
+router.get('/colors', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const limitParam = req.query.limit ? parseInt(req.query.limit, 10) : NaN;
+    const limit = Number.isFinite(limitParam) ? limitParam : 20;
+
+    const result = await getDistinctColors({ userId, limit });
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Get colors error:', error);
+    console.error('Error stack:', error.stack);
+    return res.status(500).json({ error: 'Failed to fetch colors' });
   }
 });
 
@@ -202,60 +192,27 @@ router.get('/:id', verifyToken, async (req, res) => {
 
 // POST /api/images/:imageId/retry-ai
 router.post('/:imageId/retry-ai', verifyToken, async (req, res) => {
-  const { imageId } = req.params;
-  const userId = req.user.id;
-
   try {
-    // Check if image exists and belongs to user
-    const image = await prisma.images.findFirst({
-      where: {
-        id: parseInt(imageId),
-        user_id: userId,
-      },
-    });
+    const imageId = parseInt(req.params.imageId, 10);
+    const userId = req.user.id;
 
-    if (!image) {
-      return res.status(404).json({ error: 'Image not found' });
+    // Validate image ID
+    if (!Number.isFinite(imageId) || imageId <= 0) {
+      return res.status(400).json({ error: 'Invalid image ID' });
     }
 
-    // Check metadata status
-    const metadata = await prisma.image_metadata.findFirst({
-      where: { image_id: parseInt(imageId) },
-    });
-
-    if (!metadata) {
-      return res.status(404).json({ error: 'Image metadata not found' });
-    }
-
-    if (metadata.ai_processing_status === 'completed') {
-      return res.status(400).json({ error: 'AI processing already completed' });
-    }
-
-    // Download original image from storage
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from(process.env.SUPABASE_BUCKET)
-      .download(image.original_path);
-
-    if (downloadError || !fileData) {
-      return res.status(500).json({ error: 'Failed to download image from storage' });
-    }
-
-    // Convert blob to buffer
-    const arrayBuffer = await fileData.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Trigger AI processing (fire-and-forget)
-    processImageAI(image.id, userId, buffer).catch((err) => {
-      console.error('AI retry processing failed:', err);
-    });
-
-    return res.status(202).json({
-      success: true,
-      message: 'AI processing retry initiated',
-      image_id: image.id,
-    });
+    const result = await retryAIProcessing({ imageId, userId });
+    return res.status(202).json(result);
   } catch (error) {
     console.error('Retry AI processing error:', error);
+
+    if (error.status === 404) {
+      return res.status(404).json({ error: error.message });
+    }
+    if (error.status === 400) {
+      return res.status(400).json({ error: error.message });
+    }
+
     return res.status(500).json({ error: 'Failed to retry AI processing' });
   }
 });

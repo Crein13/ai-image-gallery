@@ -27,12 +27,16 @@ const mockUploadImage = jest.fn();
 const mockGetImageById = jest.fn();
 const mockSearchImages = jest.fn();
 const mockFindSimilarToImage = jest.fn();
+const mockGetDistinctColors = jest.fn();
+const mockRetryAIProcessing = jest.fn();
 jest.unstable_mockModule('../../services/imageService.js', () => ({
   listImages: mockListImages,
   uploadImage: mockUploadImage,
   getImageById: mockGetImageById,
   searchImages: mockSearchImages,
   findSimilarToImage: mockFindSimilarToImage,
+  getDistinctColors: mockGetDistinctColors,
+  retryAIProcessing: mockRetryAIProcessing,
 }));
 
 // Import router after mocks

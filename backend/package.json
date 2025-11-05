@@ -5,6 +5,8 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "node src/server.js",
+    "start": "node src/server.js",
+    "postinstall": "prisma generate",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --watch"
   },

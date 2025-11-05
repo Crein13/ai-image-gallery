@@ -15,6 +15,8 @@ jest.unstable_mockModule('../../services/imageService.js', () => ({
   getImageById: jest.fn(),
   searchImages: mockSearchImages,
   findSimilarToImage: jest.fn(),
+  getDistinctColors: jest.fn(),
+  retryAIProcessing: jest.fn(),
 }));
 
 jest.unstable_mockModule('../../middleware/auth.js', () => ({
