@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* Reset default styles to work better with Tailwind */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+}
