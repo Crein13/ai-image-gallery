@@ -18,6 +18,7 @@ export default function Gallery() {
   const [activeFilter, setActiveFilter] = useState(null); // 'search', 'similar', 'color'
   const [selectedImage, setSelectedImage] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
 
   useEffect(() => {
     // Load images when component mounts
@@ -26,7 +27,70 @@ export default function Gallery() {
     loadAvailableColors();
   }, []);
 
-  // Extract colors from ALL images as fallback if backend colors are not available
+  // Poll for processing status updates
+  useEffect(() => {
+    let pollInterval;
+
+    // Check if we have any images that are still processing (from both displayed and all images)
+    const hasProcessingImages = [...images, ...allImages].some(image =>
+      image.metadata?.ai_processing_status === 'pending' ||
+      image.metadata?.ai_processing_status === 'processing'
+    );
+
+    if (hasProcessingImages) {
+      setIsPolling(true);
+      // Poll every 3 seconds for processing updates
+      pollInterval = setInterval(async () => {
+        try {
+          if (!isSearching) {
+            // Get fresh data from server
+            const response = await imageService.getImages();
+            const updatedAllImages = response.items || [];
+
+            // Always update allImages (complete dataset)
+            setAllImages(updatedAllImages);
+
+            if (!activeFilter) {
+              // If no active filter, update displayed images with full dataset
+              setImages(updatedAllImages);
+            } else {
+              // If we have active filters, update displayed images with fresh data for those specific images
+              const updatedDisplayedImages = images.map(currentImage => {
+                const updatedImage = updatedAllImages.find(img => img.id === currentImage.id);
+                return updatedImage || currentImage;
+              });
+              setImages(updatedDisplayedImages);
+            }
+
+            // Check if all processing is complete
+            const stillProcessing = updatedAllImages.some(image =>
+              image.metadata?.ai_processing_status === 'pending' ||
+              image.metadata?.ai_processing_status === 'processing'
+            );
+
+            if (!stillProcessing) {
+              // Reload colors when all processing is complete
+              loadAvailableColors();
+              setIsPolling(false);
+            }
+          }
+        } catch (err) {
+          // Silently fail polling - don't disrupt user experience
+          console.error('Polling error:', err);
+        }
+      }, 3000);
+    } else {
+      // No processing images, ensure polling state is false
+      setIsPolling(false);
+    }
+
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        setIsPolling(false);
+      }
+    };
+  }, [images, allImages, isSearching, activeFilter]); // Re-run when images change or search state changes  // Extract colors from ALL images as fallback if backend colors are not available
   useEffect(() => {
     // Only extract colors client-side if we have images but no colors from backend
     if (allImages.length > 0 && availableColors.length === 0) {
@@ -126,10 +190,15 @@ export default function Gallery() {
   const handleUploadSuccess = (result) => {
     // Add new images to both lists
     if (result.images) {
+      // Add images to the front of the list
       setImages(prevImages => [...result.images, ...prevImages]);
       setAllImages(prevImages => [...result.images, ...prevImages]);
+
+      // Since new images are likely to be in 'pending' status, polling will start automatically
+      // due to the useEffect that monitors processing images
     }
-    // Reload to get the latest images
+
+    // Reload to get the latest images and ensure consistency
     loadImages();
     // Reload colors in case new ones were added
     loadAvailableColors();
@@ -291,7 +360,18 @@ export default function Gallery() {
         {/* Header */}
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Images</h1>
-          <p className="text-gray-600">Upload and manage your AI-tagged images</p>
+          <div className="flex items-center justify-center gap-2">
+            <p className="text-gray-600">Upload and manage your AI-tagged images</p>
+            {isPolling && (
+              <div className="flex items-center gap-1 text-xs text-blue-600">
+                <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Processing images...</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Centered Content Container */}
@@ -326,6 +406,28 @@ export default function Gallery() {
             onFindSimilar={handleFindSimilar}
             onImageClick={handleImageClick}
           />
+
+          {/* Manual Refresh Button - show only when there are processing images */}
+          {images.some(image =>
+            image.metadata?.ai_processing_status === 'pending' ||
+            image.metadata?.ai_processing_status === 'processing'
+          ) && (
+            <div className="flex justify-center mt-6">
+              <button
+                onClick={() => {
+                  loadImages();
+                  loadAvailableColors();
+                }}
+                disabled={loading || isSearching}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {loading ? 'Refreshing...' : 'Refresh Status'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

@@ -633,10 +633,10 @@ export async function findSimilarToImage({ imageId, userId, limit = 20 }) {
  * Get distinct colors from user's images
  * @param {Object} params
  * @param {string} params.userId - ID of the user
- * @param {number} [params.limit=20] - Maximum number of colors to return
+ * @param {number|null} [params.limit=null] - Maximum number of colors to return, null for no limit
  * @returns {Promise<Object>} Object with colors array and total count
  */
-export async function getDistinctColors({ userId, limit = 20 }) {
+export async function getDistinctColors({ userId, limit = null }) {
   try {
     // Get all unique colors from user's images
     const result = await prisma.image_metadata.findMany({
@@ -679,7 +679,7 @@ export async function getDistinctColors({ userId, limit = 20 }) {
     const colors = Array.from(colorSet);
 
     return {
-      colors: colors.slice(0, limit),
+      colors: limit ? colors.slice(0, limit) : colors,
       total: colors.length
     };
   } catch (error) {

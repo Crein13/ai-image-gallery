@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 
 function ColorDropdown({ availableColors, selectedColor, onColorSelect, isSearching }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [showAll, setShowAll] = useState(false);
   const dropdownRef = useRef(null);
 
   // Close dropdown when clicking outside
@@ -19,7 +18,7 @@ function ColorDropdown({ availableColors, selectedColor, onColorSelect, isSearch
     };
   }, []);
 
-  const displayColors = showAll ? availableColors : availableColors.slice(0, 5);
+  // Always show all colors in a scrollable grid
 
   const handleColorClick = (color) => {
     onColorSelect(color);
@@ -29,19 +28,19 @@ function ColorDropdown({ availableColors, selectedColor, onColorSelect, isSearch
   const getSelectedColorDisplay = () => {
     if (!selectedColor) {
       return (
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-full border-2 border-gray-400 bg-white"></div>
-          <span>No color</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-4 h-4 rounded-full border-2 border-gray-400 bg-white flex-shrink-0"></div>
+          <span className="truncate">No color</span>
         </div>
       );
     }
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 min-w-0">
         <div
-          className="w-4 h-4 rounded-full border-2 border-gray-400"
+          className="w-4 h-4 rounded-full border-2 border-gray-400 flex-shrink-0"
           style={{ backgroundColor: selectedColor }}
         ></div>
-        <span>{selectedColor}</span>
+        <span className="truncate" title={selectedColor}>{selectedColor}</span>
       </div>
     );
   };
@@ -52,14 +51,16 @@ function ColorDropdown({ availableColors, selectedColor, onColorSelect, isSearch
         onClick={() => setIsOpen(!isOpen)}
         disabled={isSearching}
         className={`
-          flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md
+          flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md w-full sm:w-auto min-w-0
           hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
           transition-colors ${isSearching ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'}
         `}
       >
-        {getSelectedColorDisplay()}
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {getSelectedColorDisplay()}
+        </div>
         <svg
-          className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -69,13 +70,13 @@ function ColorDropdown({ availableColors, selectedColor, onColorSelect, isSearch
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-50">
-          <div className="p-2">
+        <div className="absolute top-full left-0 right-0 sm:left-0 sm:right-auto mt-1 w-full sm:w-80 max-w-sm bg-white border border-gray-200 rounded-md shadow-lg z-50">
+          <div className="p-3">
             {/* No color option */}
             <button
               onClick={() => handleColorClick(null)}
               className={`
-                w-full flex items-center gap-2 px-2 py-2 text-sm rounded hover:bg-gray-50
+                w-full flex items-center gap-2 px-2 py-2 text-sm rounded hover:bg-gray-50 mb-3
                 ${!selectedColor ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}
               `}
             >
@@ -88,42 +89,43 @@ function ColorDropdown({ availableColors, selectedColor, onColorSelect, isSearch
               )}
             </button>
 
-            {/* Color options */}
-            <div className="grid grid-cols-6 gap-2 mt-2">
-              {displayColors.map((color) => (
-                <button
-                  key={color}
-                  onClick={() => handleColorClick(color)}
-                  className={`
-                    w-8 h-8 rounded-full border-2 transition-all duration-200
-                    ${selectedColor === color
-                      ? 'border-blue-600 ring-2 ring-blue-200'
-                      : 'border-gray-300 hover:border-gray-500'
-                    }
-                  `}
-                  style={{ backgroundColor: color }}
-                  title={`Filter by ${color}`}
-                >
-                  {selectedColor === color && (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <svg className="w-3 h-3 text-white drop-shadow-sm" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
+            {/* Scrollable Color Grid */}
+            {availableColors.length > 0 && (
+              <div className="max-h-48 overflow-y-auto scrollbar-thin">
+                <div className="grid grid-cols-6 gap-2">
+                  {availableColors.map((color) => (
+                    <button
+                      key={color}
+                      onClick={() => handleColorClick(color)}
+                      className={`
+                        w-8 h-8 rounded-full border-2 transition-all duration-200 hover:scale-110
+                        ${selectedColor === color
+                          ? 'border-blue-600 ring-2 ring-blue-200 scale-110'
+                          : 'border-gray-300 hover:border-gray-500'
+                        }
+                      `}
+                      style={{ backgroundColor: color }}
+                      title={`Filter by ${color}`}
+                    >
+                      {selectedColor === color && (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white drop-shadow-sm" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
-            {/* Show more/less toggle */}
-            {availableColors.length > 5 && (
-              <div className="pt-2 mt-2 border-t border-gray-200">
-                <button
-                  onClick={() => setShowAll(!showAll)}
-                  className="w-full text-sm text-blue-600 hover:text-blue-800 py-1"
-                >
-                  {showAll ? 'Show less' : `Show all ${availableColors.length} colors`}
-                </button>
+            {/* Color count info */}
+            {availableColors.length > 0 && (
+              <div className="pt-2 mt-2 border-t border-gray-200 text-center">
+                <span className="text-xs text-gray-500">
+                  {availableColors.length} colors available
+                </span>
               </div>
             )}
           </div>
@@ -144,8 +146,8 @@ export default function SearchBar({
   isSearching
 }) {
   return (
-    <div className="p-6 border-b border-gray-200">
-      <div className="flex items-center gap-4">
+    <div className="p-4 sm:p-6 border-b border-gray-200">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
         <div className="flex-1 max-w-md">
           <label htmlFor="search" className="sr-only">Search images</label>
           <div className="relative">
@@ -222,17 +224,19 @@ export default function SearchBar({
         </div>
 
         {/* Color Palette Dropdown */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
             Colors:
           </span>
           {availableColors && availableColors.length > 0 ? (
-            <ColorDropdown
-              availableColors={availableColors}
-              selectedColor={selectedColor}
-              onColorSelect={onColorSelect}
-              isSearching={isSearching}
-            />
+            <div className="flex-1 sm:flex-initial min-w-0">
+              <ColorDropdown
+                availableColors={availableColors}
+                selectedColor={selectedColor}
+                onColorSelect={onColorSelect}
+                isSearching={isSearching}
+              />
+            </div>
           ) : (
             <div className="text-sm text-gray-500 italic">
               Upload images to see color filters

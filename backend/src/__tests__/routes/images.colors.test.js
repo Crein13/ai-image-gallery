@@ -69,7 +69,7 @@ describe('GET /api/images/colors', () => {
     expect(response.body).toEqual(mockColors);
     expect(mockGetDistinctColors).toHaveBeenCalledWith({
       userId: 'user-123',
-      limit: 20
+      limit: null // No limit by default, show all colors
     });
   });
 
@@ -109,7 +109,7 @@ describe('GET /api/images/colors', () => {
     expect(response.status).toBe(200);
     expect(mockGetDistinctColors).toHaveBeenCalledWith({
       userId: 'user-123',
-      limit: 20 // Should default to 20
+      limit: null // Should default to null (no limit)
     });
   });
 

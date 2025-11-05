@@ -31,15 +31,34 @@ function App() {
 
     try {
       if (isSignUp) {
-        await signUp(email, password)
-        setError('Account created! Please check your email to verify your account before signing in.')
+        const result = await signUp(email, password)
+
+        // Check if this is a new signup or existing user
+        if (result && result.isNewUser) {
+          // New account created, needs email verification
+          setError('Account created! Please check your email to verify your account before signing in.')
+        } else {
+          // For existing users or unclear cases, use generic message
+          setError('Please check your email to verify your account before signing in.')
+        }
       } else {
         await signIn(email, password)
         // User will be redirected automatically when user state updates
       }
     } catch (err) {
       console.error('Auth error:', err)
-      setError(err.response?.data?.error || err.message || 'Authentication failed')
+
+      // Handle specific error cases
+      if (err.response?.status === 409 && isSignUp) {
+        // User already registered
+        setError('An account with this email already exists. Try signing in instead.')
+      } else if (err.response?.status === 400) {
+        setError(err.response.data?.error || err.response.data?.message || 'Invalid request')
+      } else if (err.response?.status === 401) {
+        setError('Invalid email or password')
+      } else {
+        setError(err.response?.data?.error || err.message || 'Authentication failed')
+      }
     } finally {
       setIsLoading(false)
     }

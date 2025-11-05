@@ -30,11 +30,42 @@ describe('authService', () => {
       await expect(signup('user@example.com', 'short')).rejects.toThrow('Password must be at least 8 characters')
     })
 
-    it('returns user on success', async () => {
-      signUp.mockResolvedValueOnce({ data: { user: { id: 'u1', email: 'user@example.com' } }, error: null })
+    it('returns user on success (new user)', async () => {
+      const now = new Date().toISOString()
+      // Signup should succeed with new user
+      signUp.mockResolvedValueOnce({
+        data: {
+          user: { id: 'u1', email: 'user@example.com', email_confirmed_at: null, created_at: now },
+          session: null
+        },
+        error: null
+      })
       const res = await signup('user@example.com', 'Password123!')
       expect(signUp).toHaveBeenCalled()
-      expect(res).toMatchObject({ id: 'u1', email: 'user@example.com' })
+      expect(res).toMatchObject({
+        user: { id: 'u1', email: 'user@example.com', email_confirmed_at: null, created_at: now },
+        session: null,
+        isNewUser: true
+      })
+    })
+
+    it('returns user on success (existing user)', async () => {
+      const pastTime = new Date(Date.now() - 60000).toISOString() // 1 minute ago (old user)
+      // Signup should succeed but return existing user
+      signUp.mockResolvedValueOnce({
+        data: {
+          user: { id: 'u1', email: 'user@example.com', email_confirmed_at: pastTime, created_at: pastTime },
+          session: null
+        },
+        error: null
+      })
+      const res = await signup('user@example.com', 'Password123!')
+      expect(signUp).toHaveBeenCalled()
+      expect(res).toMatchObject({
+        user: { id: 'u1', email: 'user@example.com', email_confirmed_at: pastTime, created_at: pastTime },
+        session: null,
+        isNewUser: false
+      })
     })
 
     it('throws when provider returns error', async () => {

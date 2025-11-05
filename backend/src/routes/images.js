@@ -155,7 +155,7 @@ router.get('/colors', verifyToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const limitParam = req.query.limit ? parseInt(req.query.limit, 10) : NaN;
-    const limit = Number.isFinite(limitParam) ? limitParam : 20;
+    const limit = Number.isFinite(limitParam) ? limitParam : null; // No default limit, show all colors
 
     const result = await getDistinctColors({ userId, limit });
     return res.status(200).json(result);

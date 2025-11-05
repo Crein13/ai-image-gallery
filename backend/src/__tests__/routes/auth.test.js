@@ -20,12 +20,20 @@ describe('Auth routes', () => {
 
   describe('POST /api/auth/signup', () => {
     it('returns 201 and user on success', async () => {
-      signup.mockResolvedValueOnce({ id: 'u1', email: 'user@example.com' })
+      signup.mockResolvedValueOnce({
+        user: { id: 'u1', email: 'user@example.com' },
+        session: null,
+        isNewUser: true
+      })
       const res = await request(app)
         .post('/api/auth/signup')
         .send({ email: 'user@example.com', password: 'Password123!' })
       expect(res.status).toBe(201)
-      expect(res.body).toMatchObject({ user: { id: 'u1', email: 'user@example.com' } })
+      expect(res.body).toMatchObject({
+        user: { id: 'u1', email: 'user@example.com' },
+        session: null,
+        isNewUser: true
+      })
       expect(signup).toHaveBeenCalled()
     })
 

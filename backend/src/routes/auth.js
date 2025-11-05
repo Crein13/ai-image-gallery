@@ -7,8 +7,8 @@ const router = Router();
 router.post('/signup', async (req, res, next) => {
   try {
     const { email, password } = req.body || {};
-    const user = await signup(email, password);
-    res.status(201).json({ user });
+    const result = await signup(email, password);
+    res.status(201).json(result);
   } catch (err) {
     next(err);
   }
