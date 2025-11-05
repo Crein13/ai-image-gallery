@@ -94,9 +94,9 @@ export default function UploadZone({ onUploadSuccess }) {
         />
 
         <div className="space-y-4">
-          <div>
+          <div className="flex justify-center">
             <svg
-              className="mx-auto h-12 w-12 text-gray-400"
+              className="h-12 w-12 text-gray-400"
               stroke="currentColor"
               fill="none"
               viewBox="0 0 48 48"

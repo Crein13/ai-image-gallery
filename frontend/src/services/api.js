@@ -172,6 +172,11 @@ export const imageService = {
   async retryAI(imageId) {
     const response = await api.post(`/api/images/${imageId}/retry-ai`)
     return response.data
+  },
+
+  async getColors() {
+    const response = await api.get('/api/images/colors')
+    return response.data
   }
 }
 

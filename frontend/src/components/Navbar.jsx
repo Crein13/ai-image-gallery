@@ -20,10 +20,12 @@ export default function Navbar() {
 
   return (
     <nav className="bg-white border-b border-gray-200 shadow-sm">
-      <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-20">
+      <div className="mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <h1 className="text-xl font-bold text-blue-600">AI Image Gallery</h1>
+          <div className="ml-[10px]">
+            <h1 className="text-xl font-bold text-blue-600">AI Image Gallery</h1>
+          </div>
 
           {/* Hamburger + Menu */}
           <div className="relative">

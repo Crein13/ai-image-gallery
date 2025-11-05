@@ -49,14 +49,16 @@ function App() {
     <div className="min-h-screen bg-gray-100 flex flex-col">
       {/* Header */}
       <div className="bg-white shadow-sm py-3 px-4">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold text-blue-600">AI Image Gallery</h1>
+        <div className="flex justify-center">
+          <div className="w-full px-4">
+            <h1 className="text-2xl font-bold text-blue-600">AI Image Gallery</h1>
+          </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex items-center justify-center px-4 py-8">
-        <div className="w-full max-w-sm mx-auto">
+        <div className="w-full" style={{maxWidth: '400px'}}>
           {/* Hero Text */}
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-gray-900 mb-4">
