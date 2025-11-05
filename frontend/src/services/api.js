@@ -86,7 +86,6 @@ export const authService = {
         email: payload.email,
       }
     } catch (error) {
-      console.error('Error decoding token:', error)
       return null
     }
   },

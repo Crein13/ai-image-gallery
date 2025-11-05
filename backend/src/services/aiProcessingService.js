@@ -34,9 +34,6 @@ export async function processImageAI(imageId, userId, imageBuffer) {
       },
     });
   } catch (error) {
-    // Log error for debugging
-    console.error(`AI processing failed for image ${imageId}:`, error);
-
     // Determine failure reason for better user feedback
     let failureReason = 'unknown';
     if (error.message?.includes('quota')) {

@@ -10,7 +10,7 @@ export default function Navbar() {
       await signOut();
       // Navigation will be handled by App component when user becomes null
     } catch (error) {
-      console.error('Logout failed:', error);
+      // Logout error handled silently
     }
   };
 

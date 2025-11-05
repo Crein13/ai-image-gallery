@@ -41,8 +41,7 @@ router.get('/', verifyToken, async (req, res) => {
     }));
   } catch (error) {
     console.error('List images error:', error);
-    console.error('Error stack:', error.stack);
-    return res.status(500).json({ error: 'Failed to list images' });
+    return res.status(500).json({ error: 'Failed to retrieve images' });
   }
 });
 
@@ -161,7 +160,6 @@ router.get('/colors', verifyToken, async (req, res) => {
     return res.status(200).json(result);
   } catch (error) {
     console.error('Get colors error:', error);
-    console.error('Error stack:', error.stack);
     return res.status(500).json({ error: 'Failed to fetch colors' });
   }
 });

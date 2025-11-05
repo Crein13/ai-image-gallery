@@ -46,8 +46,6 @@ function App() {
         // User will be redirected automatically when user state updates
       }
     } catch (err) {
-      console.error('Auth error:', err)
-
       // Handle specific error cases
       if (err.response?.status === 409 && isSignUp) {
         // User already registered

@@ -76,7 +76,6 @@ export default function Gallery() {
           }
         } catch (err) {
           // Silently fail polling - don't disrupt user experience
-          console.error('Polling error:', err);
         }
       }, 3000);
     } else {

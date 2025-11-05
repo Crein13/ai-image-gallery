@@ -43,7 +43,6 @@ export async function extractDominantColors(buffer, colorCount = 5) {
 
     return colors;
   } catch (error) {
-    console.error('Color extraction error:', error);
     throw new Error(`Failed to extract colors: ${error.message}`);
   }
 }

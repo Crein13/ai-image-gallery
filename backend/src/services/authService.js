@@ -22,9 +22,6 @@ export async function signup(email, password) {
 
   const { data, error } = await supabase.auth.signUp({ email, password })
 
-  // Log for debugging
-  console.log('Supabase signup response:', { data, error })
-
   if (error) {
     // Handle specific Supabase errors
     if (error.message.includes('already registered') || error.message.includes('User already registered')) {

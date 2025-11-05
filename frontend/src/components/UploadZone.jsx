@@ -49,7 +49,6 @@ export default function UploadZone({ onUploadSuccess }) {
       }
     } catch (err) {
       // Error is already handled by the hook
-      console.error('Upload failed:', err);
     }
   };
 

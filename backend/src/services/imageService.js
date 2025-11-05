@@ -141,7 +141,6 @@ export async function listImages({ userId, limit = 20, offset = 0, sort = 'newes
       prevOffset,
     };
   } catch (error) {
-    console.error('Error in listImages:', error);
     // Return empty result on error instead of throwing
     return {
       items: [],
@@ -401,7 +400,6 @@ export async function uploadImage(file, userId) {
       colors = await extractDominantColors(file.buffer);
       dominantColor = colors.length > 0 ? colors[0] : null;
     } catch (error) {
-      console.warn('Color extraction failed:', error);
       // Continue with upload even if color extraction fails
     }
 
@@ -411,7 +409,6 @@ export async function uploadImage(file, userId) {
       const result = await generateThumbnail(file.buffer, 300);
       thumbnailBuffer = result.thumbnailBuffer;
     } catch (error) {
-      console.error('Sharp thumbnail generation error:', error);
       const err = new Error('Failed to generate thumbnail');
       err.status = 500;
       throw err;
@@ -425,7 +422,6 @@ export async function uploadImage(file, userId) {
       });
 
     if (originalError || !originalData) {
-      console.error('Supabase original upload error:', originalError);
       const err = new Error('Failed to upload original image');
       err.status = 500;
       throw err;
@@ -439,7 +435,6 @@ export async function uploadImage(file, userId) {
       });
 
     if (thumbError || !thumbData) {
-      console.error('Supabase thumbnail upload error:', thumbError);
       const err = new Error('Failed to upload thumbnail');
       err.status = 500;
       throw err;
@@ -470,8 +465,8 @@ export async function uploadImage(file, userId) {
       });
 
       // Trigger AI processing in background (fire-and-forget)
-      processImageAI(imageRecord.id, userId, file.buffer).catch((err) => {
-        console.error('AI processing failed:', err);
+      processImageAI(imageRecord.id, userId, file.buffer).catch(() => {
+        // AI processing failed - will be retried later
       });
 
       // Return image record with color data
@@ -482,7 +477,6 @@ export async function uploadImage(file, userId) {
         ai_processing_status: 'pending', // Will be updated by AI processing
       };
     } catch (error) {
-      console.error('Prisma create error:', error);
       const err = new Error('Failed to save image record');
       err.status = 500;
       throw err;
@@ -683,7 +677,6 @@ export async function getDistinctColors({ userId, limit = null }) {
       total: colors.length
     };
   } catch (error) {
-    console.error('Error in getDistinctColors:', error);
     // Return empty result on error instead of throwing
     return {
       colors: [],
@@ -747,8 +740,8 @@ export async function retryAIProcessing({ imageId, userId }) {
   const buffer = Buffer.from(arrayBuffer);
 
   // Trigger AI processing (fire-and-forget)
-  processImageAI(image.id, userId, buffer).catch((err) => {
-    console.error('AI retry processing failed:', err);
+  processImageAI(image.id, userId, buffer).catch(() => {
+    // AI processing retry failed - will be handled appropriately
   });
 
   return {
