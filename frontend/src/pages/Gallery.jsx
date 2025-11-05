@@ -355,9 +355,9 @@ export default function Gallery() {
     <div className="min-h-screen bg-gray-50">
       <Navbar />
 
-      <div className="px-4 sm:px-6 lg:px-8 py-12">
+      <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
         {/* Header */}
-        <div className="mb-8 text-center">
+        <div className="mb-6 sm:mb-8 text-center">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Images</h1>
           <div className="flex items-center justify-center gap-2">
             <p className="text-gray-600">Upload and manage your AI-tagged images</p>
@@ -374,11 +374,11 @@ export default function Gallery() {
         </div>
 
         {/* Centered Content Container */}
-        <div className="flex flex-col items-center space-y-16">
+        <div className="flex flex-col items-center space-y-8 sm:space-y-12 lg:space-y-16">
           {/* Upload Section - Always Visible */}
           <div className="w-full">
             <div className="flex justify-center">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 w-full" style={{maxWidth: '1200px'}}>
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 w-full" style={{maxWidth: '1200px'}}>
                 <UploadZone onUploadSuccess={handleUploadSuccess} />
               </div>
             </div>

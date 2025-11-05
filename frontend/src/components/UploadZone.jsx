@@ -73,7 +73,7 @@ export default function UploadZone({ onUploadSuccess }) {
     <div className="w-full">
       {/* Upload Zone */}
       <div
-        className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        className={`relative border-2 border-dashed rounded-lg p-4 sm:p-6 lg:p-8 text-center transition-colors ${
           dragActive
             ? 'border-blue-500 bg-blue-50'
             : 'border-gray-300 hover:border-gray-400'

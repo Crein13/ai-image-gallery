@@ -15,7 +15,7 @@ export default function ImageGrid({
 }) {
   if (loading || isSearching) {
     return (
-      <div className="p-8 text-center">
+      <div className="p-4 sm:p-6 lg:p-8 text-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
         <p className="mt-4 text-gray-500">
           {isSearching ? 'Searching images...' : 'Loading images...'}
@@ -26,7 +26,7 @@ export default function ImageGrid({
 
   if (error) {
     return (
-      <div className="p-8 text-center">
+      <div className="p-4 sm:p-6 lg:p-8 text-center">
         <div className="text-red-500 mb-4">
           <svg className="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -110,8 +110,8 @@ export default function ImageGrid({
   }
 
   return (
-    <div className="p-8">
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
         {images.map((image) => (
           <ImageCard
             key={image.id}
