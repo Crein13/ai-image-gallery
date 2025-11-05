@@ -98,6 +98,11 @@ export default function Gallery() {
       return;
     }
 
+    // Prevent multiple simultaneous searches
+    if (isSearching) {
+      return;
+    }
+
     try {
       setIsSearching(true);
       setError(null);
@@ -121,11 +126,21 @@ export default function Gallery() {
     const query = e.target.value;
     setSearchQuery(query);
 
-    // Debounce search - search after user stops typing for 300ms
+    // Clear any existing timeout
     clearTimeout(window.searchTimeout);
-    window.searchTimeout = setTimeout(() => {
-      searchImages(query);
-    }, 300);
+
+    // If we're currently searching, don't start a new search immediately
+    if (isSearching) {
+      // Wait a bit longer if already searching to avoid spam
+      window.searchTimeout = setTimeout(() => {
+        searchImages(query);
+      }, 500);
+    } else {
+      // Normal debounce delay when not searching
+      window.searchTimeout = setTimeout(() => {
+        searchImages(query);
+      }, 300);
+    }
   };
 
   const handleSearchKeyDown = (e) => {
