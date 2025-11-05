@@ -7,6 +7,7 @@ import { imageService, healthService } from '../services/api';
 
 export default function Gallery() {
   const [images, setImages] = useState([]);
+  const [allImages, setAllImages] = useState([]); // Store all images for color extraction
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,6 +26,40 @@ export default function Gallery() {
     loadAvailableColors();
   }, []);
 
+  // Extract colors from ALL images as fallback if backend colors are not available
+  useEffect(() => {
+    // Only extract colors client-side if we have images but no colors from backend
+    if (allImages.length > 0 && availableColors.length === 0) {
+      const extractedColors = new Set();
+
+      allImages.forEach((image) => {
+        // Try to get colors from image metadata (backend returns as 'metadata', not 'image_metadata')
+        if (image.metadata) {
+          // Add dominant color if it exists
+          if (image.metadata.dominant_color) {
+            extractedColors.add(image.metadata.dominant_color.toLowerCase());
+          }
+
+          // Add colors from colors array
+          if (image.metadata.colors && Array.isArray(image.metadata.colors)) {
+            image.metadata.colors.forEach(color => {
+              if (color && typeof color === 'string' && color.match(/^#[0-9A-Fa-f]{6}$/i)) {
+                extractedColors.add(color.toLowerCase());
+              }
+            });
+          }
+        }
+      });
+
+      const colorsArray = Array.from(extractedColors);
+
+      // Use extracted colors as fallback when backend colors are not available
+      if (colorsArray.length > 0) {
+        setAvailableColors(colorsArray);
+      }
+    }
+  }, [allImages, availableColors]); // Monitor both allImages and availableColors
+
   const loadImages = async () => {
     try {
       setLoading(true);
@@ -41,11 +76,11 @@ export default function Gallery() {
       }
 
       const response = await imageService.getImages();
-      setImages(response.items || []);
-      setTotalImages(response.total || response.items?.length || 0);
+      const imageItems = response.items || [];
+      setImages(imageItems);
+      setAllImages(imageItems); // Store all images for color extraction
+      setTotalImages(response.total || imageItems.length || 0);
     } catch (err) {
-      console.error('Error loading images:', err);
-
       // Handle different types of errors
       if (err.code === 'ERR_NETWORK' || err.code === 'ECONNABORTED' || !err.response) {
         setError('Backend server is not running. Please start the backend server first.');
@@ -57,7 +92,6 @@ export default function Gallery() {
         setError('Authentication expired. Please refresh the page.');
       } else if (err.response?.status === 500) {
         // Server error - could be database connection or empty data
-        console.warn('Server error - might be empty database or connection issue');
         setImages([]);
         setError('No images found. Upload some images to get started!');
       } else {
@@ -71,19 +105,29 @@ export default function Gallery() {
 
   const loadAvailableColors = async () => {
     try {
+      // First check if we're authenticated
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        return;
+      }
+
       const response = await imageService.getColors();
-      setAvailableColors(response.colors || []);
+      const colors = response.colors || [];
+
+      // Use backend colors as the primary source, client-side extraction as fallback
+      if (colors.length > 0) {
+        setAvailableColors(colors);
+      }
     } catch (err) {
-      console.error('Error loading colors:', err);
-      // Don't show error for colors - it's not critical, just set empty array
-      setAvailableColors([]);
+      // Client-side extraction will handle it as fallback
     }
   };
 
   const handleUploadSuccess = (result) => {
-    // Add new images to the list
+    // Add new images to both lists
     if (result.images) {
       setImages(prevImages => [...result.images, ...prevImages]);
+      setAllImages(prevImages => [...result.images, ...prevImages]);
     }
     // Reload to get the latest images
     loadImages();
@@ -91,31 +135,47 @@ export default function Gallery() {
     loadAvailableColors();
   };
 
-  const searchImages = async (query) => {
-    if (!query.trim()) {
-      // If search is empty, load all images
-      loadImages();
+  const searchImages = async (query, colorOverride = null) => {
+    // Prevent multiple simultaneous searches
+    if (isSearching) {
       return;
     }
 
-    // Prevent multiple simultaneous searches
-    if (isSearching) {
+    // Use colorOverride if provided, otherwise use selectedColor state
+    const activeColor = colorOverride !== null ? colorOverride : selectedColor;
+
+    // If no query and no color filter, load all images
+    if (!query?.trim() && !activeColor) {
+      loadImages();
       return;
     }
 
     try {
       setIsSearching(true);
       setError(null);
-      setActiveFilter('search');
 
-      const response = await imageService.searchImages({
-        query: query.trim(),
-        limit: 20 // Default limit for search
-      });
-      setImages(response.items || []);
+      // Determine active filter type
+      if (query?.trim() && activeColor) {
+        setActiveFilter('both');
+      } else if (query?.trim()) {
+        setActiveFilter('search');
+      } else if (activeColor) {
+        setActiveFilter('color');
+      }
+
+      const searchParams = {};
+      if (query?.trim()) {
+        searchParams.query = query.trim();
+      }
+      if (activeColor) {
+        searchParams.color = activeColor;
+      }
+      searchParams.limit = 20;
+
+      const response = await imageService.searchImages(searchParams);
+      setImages(response.items || []); // Only update displayed images, not allImages
       setTotalImages(response.total || response.items?.length || 0);
     } catch (err) {
-      console.error('Error searching images:', err);
       setError(`Failed to search images: ${err.response?.data?.message || err.message}`);
     } finally {
       setIsSearching(false);
@@ -156,6 +216,7 @@ export default function Gallery() {
     setSearchQuery('');
     setSelectedColor(null);
     setActiveFilter(null);
+    clearTimeout(window.searchTimeout);
     loadImages(); // Load all images when clearing search
   };
 
@@ -168,10 +229,9 @@ export default function Gallery() {
       setActiveFilter('similar');
 
       const response = await imageService.getSimilarImages(imageId);
-      setImages(response.items || []);
+      setImages(response.items || []); // Only update displayed images, not allImages
       setTotalImages(response.total || response.items?.length || 0);
     } catch (err) {
-      console.error('Error finding similar images:', err);
       setError(`Failed to find similar images: ${err.response?.data?.message || err.message}`);
     } finally {
       setIsSearching(false);
@@ -184,23 +244,8 @@ export default function Gallery() {
   };
 
   const searchByColor = async (color) => {
-    try {
-      setIsSearching(true);
-      setError(null);
-      setActiveFilter('color');
-
-      const response = await imageService.searchImages({
-        color: color,
-        limit: 20 // Default limit for color search
-      });
-      setImages(response.items || []);
-      setTotalImages(response.total || response.items?.length || 0);
-    } catch (err) {
-      console.error('Error searching by color:', err);
-      setError(`Failed to search by color: ${err.response?.data?.message || err.message}`);
-    } finally {
-      setIsSearching(false);
-    }
+    // Use the unified search function with current query and the specific color
+    await searchImages(searchQuery, color);
   };
 
   const handleColorClick = (color) => {
@@ -210,13 +255,16 @@ export default function Gallery() {
   const handleColorSelect = (color) => {
     setSelectedColor(color);
     if (color) {
-      // Clear text search when selecting a color
-      setSearchQuery('');
+      // Don't clear text search - allow both color and text filters
       searchByColor(color);
     } else {
-      // If color is cleared, load all images
-      setActiveFilter(null);
-      loadImages();
+      // If color is cleared, search with current text query or load all images
+      if (searchQuery.trim()) {
+        searchImages(searchQuery);
+      } else {
+        setActiveFilter(null);
+        loadImages();
+      }
     }
   };
 

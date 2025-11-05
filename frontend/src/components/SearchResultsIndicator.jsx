@@ -13,26 +13,33 @@ export default function SearchResultsIndicator({
   }
 
   const getResultsText = () => {
-    if (activeFilter === 'search' && searchQuery) {
+    if (activeFilter === 'both' && searchQuery && selectedColor) {
+      return totalImages > 0
+        ? `Found ${totalImages} image${totalImages === 1 ? '' : 's'} matching "${searchQuery}" with this color`
+        : `No images found for "${searchQuery}" with this color`;
+    } else if (activeFilter === 'search' && searchQuery) {
       return totalImages > 0
         ? `Found ${totalImages} image${totalImages === 1 ? '' : 's'} matching "${searchQuery}"`
         : `No images found for "${searchQuery}"`;
     } else if (activeFilter === 'similar') {
       return `Showing ${totalImages} similar image${totalImages === 1 ? '' : 's'}`;
-    } else if (activeFilter === 'color') {
+    } else if (activeFilter === 'color' && selectedColor) {
       return totalImages > 0
-        ? `Found ${totalImages} image${totalImages === 1 ? '' : 's'} with ${selectedColor ? 'this color' : 'the selected color'}`
-        : `No images found with ${selectedColor ? 'this color' : 'the selected color'}`;
+        ? `Found ${totalImages} image${totalImages === 1 ? '' : 's'} with this color`
+        : `No images found with this color`;
     }
     return 'Showing filtered results';
   };
 
   const getButtonText = () => {
-    return activeFilter === 'search' ? 'Clear search' : 'Show all images';
+    if (activeFilter === 'search' || activeFilter === 'both') {
+      return 'Clear search';
+    }
+    return 'Show all images';
   };
 
   const handleButtonClick = () => {
-    if (activeFilter === 'search') {
+    if (activeFilter === 'search' || activeFilter === 'both') {
       onClearSearch();
     } else {
       onShowAll();
