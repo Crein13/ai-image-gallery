@@ -129,12 +129,17 @@ CREATE POLICY "Users can only see own metadata" ON image_metadata
 - Create storage public bucket
 - Configure Storage Policies
 - Run SQL schema (images + image_metadata)
+- **Configure Email Confirmation**:
+  - Go to Authentication > URL Configuration in Supabase dashboard
+  - Set Site URL to: `http://localhost:5173` (development) or your production domain
+  - Set Redirect URLs to: `http://localhost:5173/confirm-email` (development) or `https://yourdomain.com/confirm-email` (production)
 - Save API keys in .env
 
 🧩 Backend Setup (Express)
 - npm init
 - Install deps: express, dotenv, axios, cors, openai, @prisma/client, multer, sharp, node-vibrant, supabase-js
 - Configure Supabase client + Prisma
+- Set FRONTEND_URL environment variable for email confirmation redirects
 - Implement image upload and thumbnail generator
 - Add OpenAI tagging route
 

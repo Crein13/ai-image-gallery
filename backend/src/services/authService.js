@@ -20,7 +20,15 @@ export async function signup(email, password) {
   }
   assertPassword(password)
 
-  const { data, error } = await supabase.auth.signUp({ email, password })
+  const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: `${baseUrl}/confirm-email`
+    }
+  })
 
   if (error) {
     // Handle specific Supabase errors
