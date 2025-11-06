@@ -14,25 +14,32 @@ function EmailConfirmation() {
     const handleEmailConfirmation = async () => {
       try {
         const hashParams = new URLSearchParams(window.location.hash.substring(1))
+
+        // Check if we have any tokens in the URL (either query or hash)
+        const hasTokens = searchParams.has('token_hash') ||
+                          searchParams.has('access_token') ||
+                          hashParams.has('token_hash') ||
+                          hashParams.has('access_token')
+
+        if (hasTokens) {
+          // Give Supabase a moment to process the tokens automatically
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+
+        // Check for existing session after potential auto-processing
         const { data: { session } } = await supabase.auth.getSession()
 
-        if (session?.user && session.user.email_confirmed_at) {
+        if (session?.user) {
           setStatus('success')
           setMessage('Your email has been confirmed successfully!')
           return
         }
 
-        let token_hash = searchParams.get('token_hash')
-        let type = searchParams.get('type')
-        let access_token = searchParams.get('access_token')
-        let refresh_token = searchParams.get('refresh_token')
-
-        if (!token_hash && hashParams.get('token_hash')) {
-          token_hash = hashParams.get('token_hash')
-          type = hashParams.get('type')
-          access_token = hashParams.get('access_token')
-          refresh_token = hashParams.get('refresh_token')
-        }
+        // Extract tokens from query params first, then hash params
+        let token_hash = searchParams.get('token_hash') || hashParams.get('token_hash')
+        let type = searchParams.get('type') || hashParams.get('type')
+        let access_token = searchParams.get('access_token') || hashParams.get('access_token')
+        let refresh_token = searchParams.get('refresh_token') || hashParams.get('refresh_token')
 
         if (token_hash && type) {
           const { data, error } = await supabase.auth.verifyOtp({
@@ -62,32 +69,39 @@ function EmailConfirmation() {
         }
 
         if (access_token && refresh_token) {
-          const { data, error } = await supabase.auth.setSession({
-            access_token,
-            refresh_token
-          })
+          try {
+            const { data, error } = await supabase.auth.setSession({
+              access_token,
+              refresh_token
+            })
 
-          if (error) {
-            if (error.message.includes('expired')) {
-              setStatus('error')
-              setMessage('This confirmation link has expired. Please sign up again.')
-            } else if (error.message.includes('already been consumed')) {
-              setStatus('already-confirmed')
-              setMessage('This confirmation link has already been used.')
-            } else {
-              setStatus('error')
-              setMessage('Email confirmation failed. Please try signing up again.')
+            if (error) {
+              if (error.message.includes('expired')) {
+                setStatus('error')
+                setMessage('This confirmation link has expired. Please sign up again.')
+              } else if (error.message.includes('already been consumed')) {
+                setStatus('already-confirmed')
+                setMessage('This confirmation link has already been used.')
+              } else {
+                setStatus('error')
+                setMessage(`Email confirmation failed: ${error.message}`)
+              }
+              return
             }
-            return
-          }
 
-          if (data.user) {
-            setStatus('success')
-            setMessage('Your email has been confirmed successfully!')
+            if (data?.user) {
+              setStatus('success')
+              setMessage('Your email has been confirmed successfully!')
+              return
+            }
+          } catch (err) {
+            setStatus('error')
+            setMessage('An error occurred during confirmation. Please try again.')
             return
           }
         }
 
+        // Give more time for Supabase's automatic token processing
         timeoutId = setTimeout(async () => {
           const { data: { session: finalSession } } = await supabase.auth.getSession()
           if (finalSession?.user) {
@@ -96,9 +110,16 @@ function EmailConfirmation() {
             return
           }
 
-          setStatus('error')
-          setMessage('Invalid confirmation link. This might be because the link was opened from an email client that doesn\'t preserve URL parameters. Please try copying the link and pasting it directly in your browser, or try signing up again.')
-        }, 3000)
+          // Check if we had tokens but still failed
+          const hadTokens = hashParams.has('access_token') || searchParams.has('token_hash')
+          if (hadTokens) {
+            setStatus('error')
+            setMessage('Email confirmation failed. This might be due to token processing issues. Please try signing up again.')
+          } else {
+            setStatus('error')
+            setMessage('Invalid confirmation link. The link appears to be missing required parameters. Please ensure you clicked the complete link from your email, or try signing up again.')
+          }
+        }, 7000)
 
       } catch (err) {
         setStatus('error')
@@ -215,13 +236,7 @@ function EmailConfirmation() {
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">Confirmation Failed</h2>
                 <p className="text-gray-600 mb-6">{message}</p>
-                {/* Debug info in development */}
-                {import.meta.env.DEV && (
-                  <div className="text-left bg-gray-100 p-3 rounded mb-4 text-xs">
-                    <strong>Debug info:</strong><br/>
-                    URL params: {JSON.stringify(Object.fromEntries(searchParams.entries()), null, 2)}
-                  </div>
-                )}
+
                 <button
                   onClick={handleContinue}
                   className="w-full bg-blue-600 text-white py-3 px-4 rounded-md font-semibold hover:bg-blue-700 transition-colors"
