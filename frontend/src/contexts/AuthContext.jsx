@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../services/api';
+import { supabase } from '../supabaseClient';
 
 const AuthContext = createContext();
 
@@ -9,12 +10,60 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const currentUser = authService.getCurrentUser();
-    const authenticated = authService.isAuthenticated();
+    const initializeAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
 
-    setUser(currentUser);
-    setIsAuthenticated(authenticated);
-    setLoading(false);
+        if (session?.user) {
+          localStorage.setItem('access_token', session.access_token);
+          if (session.refresh_token) {
+            localStorage.setItem('refresh_token', session.refresh_token);
+          }
+          setUser({
+            id: session.user.id,
+            email: session.user.email
+          });
+          setIsAuthenticated(true);
+        } else {
+          const currentUser = authService.getCurrentUser();
+          const authenticated = authService.isAuthenticated();
+          setUser(currentUser);
+          setIsAuthenticated(authenticated);
+        }
+      } catch (error) {
+        const currentUser = authService.getCurrentUser();
+        const authenticated = authService.isAuthenticated();
+        setUser(currentUser);
+        setIsAuthenticated(authenticated);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        localStorage.setItem('access_token', session.access_token);
+        if (session.refresh_token) {
+          localStorage.setItem('refresh_token', session.refresh_token);
+        }
+        setUser({
+          id: session.user.id,
+          email: session.user.email
+        });
+        setIsAuthenticated(true);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setIsAuthenticated(false);
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signUp = async (email, password) => {

@@ -13,41 +13,34 @@ function EmailConfirmation() {
 
     const handleEmailConfirmation = async () => {
       try {
-        // Log all URL parameters for debugging
-        console.log('URL search params:', Object.fromEntries(searchParams.entries()))
+        const hashParams = new URLSearchParams(window.location.hash.substring(1))
+        const { data: { session } } = await supabase.auth.getSession()
 
-        // First, let Supabase handle the URL parameters automatically
-        // This is the recommended approach for email confirmations
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-
-        if (sessionError) {
-          console.error('Session error:', sessionError)
-        }
-
-        // Check if we already have a session (successful confirmation)
         if (session?.user && session.user.email_confirmed_at) {
-          console.log('User session found with confirmed email')
           setStatus('success')
           setMessage('Your email has been confirmed successfully!')
           return
         }
 
-        // Check for different possible parameter formats that Supabase might use
-        const token_hash = searchParams.get('token_hash')
-        const type = searchParams.get('type')
-        const access_token = searchParams.get('access_token')
-        const refresh_token = searchParams.get('refresh_token')
+        let token_hash = searchParams.get('token_hash')
+        let type = searchParams.get('type')
+        let access_token = searchParams.get('access_token')
+        let refresh_token = searchParams.get('refresh_token')
 
-        // Handle token_hash format (common in newer Supabase versions)
+        if (!token_hash && hashParams.get('token_hash')) {
+          token_hash = hashParams.get('token_hash')
+          type = hashParams.get('type')
+          access_token = hashParams.get('access_token')
+          refresh_token = hashParams.get('refresh_token')
+        }
+
         if (token_hash && type) {
-          console.log('Using token_hash verification method')
           const { data, error } = await supabase.auth.verifyOtp({
             token_hash,
             type: type === 'signup' ? 'signup' : 'email'
           })
 
           if (error) {
-            console.error('Token hash verification error:', error)
             if (error.message.includes('expired') || error.message.includes('invalid')) {
               setStatus('error')
               setMessage('This confirmation link has expired or is invalid. Please sign up again.')
@@ -68,16 +61,13 @@ function EmailConfirmation() {
           }
         }
 
-        // Handle access_token/refresh_token format (legacy or certain configurations)
         if (access_token && refresh_token) {
-          console.log('Using access/refresh token verification method')
           const { data, error } = await supabase.auth.setSession({
             access_token,
             refresh_token
           })
 
           if (error) {
-            console.error('Session verification error:', error)
             if (error.message.includes('expired')) {
               setStatus('error')
               setMessage('This confirmation link has expired. Please sign up again.')
@@ -98,39 +88,42 @@ function EmailConfirmation() {
           }
         }
 
-        // If we get here, no valid tokens were found or processing failed
-        // Give it a moment for Supabase's automatic processing
-        timeoutId = setTimeout(() => {
-          console.log('No valid confirmation tokens found in URL')
+        timeoutId = setTimeout(async () => {
+          const { data: { session: finalSession } } = await supabase.auth.getSession()
+          if (finalSession?.user) {
+            setStatus('success')
+            setMessage('Your email has been confirmed successfully!')
+            return
+          }
+
           setStatus('error')
-          setMessage('Invalid confirmation link. Please try signing up again.')
-        }, 2000) // Wait 2 seconds to let Supabase process
+          setMessage('Invalid confirmation link. This might be because the link was opened from an email client that doesn\'t preserve URL parameters. Please try copying the link and pasting it directly in your browser, or try signing up again.')
+        }, 3000)
 
       } catch (err) {
-        console.error('Unexpected error during email confirmation:', err)
         setStatus('error')
         setMessage('An unexpected error occurred. Please try again.')
       }
     }
 
-    // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state change:', event, session?.user?.email_confirmed_at)
-
       if (event === 'SIGNED_IN' && session?.user) {
         if (timeoutId) clearTimeout(timeoutId)
-        setStatus('success')
-        setMessage('Your email has been confirmed successfully!')
+        setTimeout(() => {
+          setStatus('success')
+          setMessage('Your email has been confirmed successfully!')
+        }, 500)
       } else if (event === 'TOKEN_REFRESHED' && session?.user) {
         if (timeoutId) clearTimeout(timeoutId)
-        setStatus('success')
-        setMessage('Your email has been confirmed successfully!')
+        setTimeout(() => {
+          setStatus('success')
+          setMessage('Your email has been confirmed successfully!')
+        }, 500)
       }
     })
 
     handleEmailConfirmation()
 
-    // Cleanup
     return () => {
       if (timeoutId) clearTimeout(timeoutId)
       subscription.unsubscribe()
@@ -138,8 +131,9 @@ function EmailConfirmation() {
   }, [searchParams])
 
   const handleContinue = () => {
-    // Redirect to the main app
-    navigate('/')
+    setTimeout(() => {
+      navigate('/')
+    }, 100)
   }
 
   return (
