@@ -79,6 +79,8 @@ export function AuthProvider({ children }) {
   };
 
   const signOut = async () => {
+    // Sign out from both Supabase and local auth service
+    await supabase.auth.signOut();
     await authService.signOut();
     setUser(null);
     setIsAuthenticated(false);
