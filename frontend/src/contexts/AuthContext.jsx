@@ -9,7 +9,6 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    // Check if user is already authenticated
     const currentUser = authService.getCurrentUser();
     const authenticated = authService.isAuthenticated();
 
@@ -20,7 +19,6 @@ export function AuthProvider({ children }) {
 
   const signUp = async (email, password) => {
     const data = await authService.signUp(email, password);
-    // Don't set user immediately for signup, wait for email verification
     return data;
   };
 

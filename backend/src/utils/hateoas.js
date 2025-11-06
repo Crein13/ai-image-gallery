@@ -1,28 +1,21 @@
 /**
- * Utility functions for building HATEOAS links
- */
-
-/**
- * Build pagination links for list endpoints
  * @param {Object} params
- * @param {string} params.basePath - Base path for the endpoint
- * @param {Object} params.result - Result object with pagination info
- * @param {string} [params.sort] - Sort parameter
- * @param {Object} [params.queryParams] - Additional query parameters
- * @returns {Object} Links object
+ * @param {string} params.basePath
+ * @param {Object} params.result
+ * @param {string} [params.sort]
+ * @param {Object} [params.queryParams]
+ * @returns {Object}
  */
 export function buildPaginationLinks({ basePath, result, sort, queryParams = {} }) {
   const buildLink = (newOffset) => {
     const params = new URLSearchParams();
 
-    // Add query parameters
     Object.entries(queryParams).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
         params.set(key, value.toString());
       }
     });
 
-    // Add pagination parameters
     params.set('limit', result.limit.toString());
     params.set('offset', newOffset.toString());
 
@@ -49,12 +42,11 @@ export function buildPaginationLinks({ basePath, result, sort, queryParams = {} 
 }
 
 /**
- * Build standard paginated response
  * @param {Object} params
- * @param {Array} params.items - Items array
- * @param {Object} params.result - Result object with pagination info
- * @param {Object} params.links - HATEOAS links
- * @returns {Object} Formatted response
+ * @param {Array} params.items
+ * @param {Object} params.result
+ * @param {Object} params.links
+ * @returns {Object}
  */
 export function buildPaginatedResponse({ items, result, links }) {
   return {

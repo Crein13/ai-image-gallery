@@ -3,7 +3,6 @@ import { signup, signin } from '../services/authService.js';
 
 const router = Router();
 
-// POST /api/auth/signup
 router.post('/signup', async (req, res, next) => {
   try {
     const { email, password } = req.body || {};
@@ -14,7 +13,6 @@ router.post('/signup', async (req, res, next) => {
   }
 });
 
-// POST /api/auth/signin
 router.post('/signin', async (req, res, next) => {
   try {
     const { email, password } = req.body || {};

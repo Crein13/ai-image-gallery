@@ -8,9 +8,6 @@ const mockOpenAI = jest.fn(() => ({
       create: mockCreate,
     },
   },
-  embeddings: {
-    create: mockCreate,
-  },
 }));
 
 jest.unstable_mockModule('openai', () => ({
@@ -18,7 +15,7 @@ jest.unstable_mockModule('openai', () => ({
 }));
 
 // Import service after mocking
-const { analyzeImage, generateEmbedding } = await import('../../services/openaiService.js');
+const { analyzeImage } = await import('../../services/openaiService.js');
 
 describe('openaiService', () => {
   const originalKey = process.env.OPENAI_API_KEY;
@@ -111,53 +108,6 @@ describe('openaiService', () => {
       const mockBuffer = Buffer.from('fake-image-data');
 
       await expect(analyzeImage(mockBuffer)).rejects.toThrow('OPENAI_API_KEY not configured');
-    });
-  });
-
-  describe('generateEmbedding', () => {
-    test('should generate embedding vector from text', async () => {
-      const mockEmbedding = Array(1536).fill(0).map((_, i) => i * 0.001);
-
-      mockCreate.mockResolvedValueOnce({
-        data: [{
-          embedding: mockEmbedding,
-        }],
-      });
-
-      const result = await generateEmbedding('A beautiful sunset over the ocean');
-
-      expect(result).toEqual(mockEmbedding);
-      expect(result.length).toBe(1536);
-
-      expect(mockCreate).toHaveBeenCalledWith({
-        model: 'text-embedding-3-small',
-        input: 'A beautiful sunset over the ocean',
-      });
-    });
-
-    test('should handle empty text input', async () => {
-      mockCreate.mockResolvedValueOnce({
-        data: [{
-          embedding: Array(1536).fill(0),
-        }],
-      });
-
-      const result = await generateEmbedding('');
-
-      expect(result).toBeDefined();
-      expect(result.length).toBe(1536);
-    });
-
-    test('should handle OpenAI API errors', async () => {
-      mockCreate.mockRejectedValueOnce(new Error('Embedding generation failed'));
-
-      await expect(generateEmbedding('test text')).rejects.toThrow('Embedding generation failed');
-    });
-
-    test('should throw when OPENAI_API_KEY is not configured', async () => {
-      delete process.env.OPENAI_API_KEY;
-
-      await expect(generateEmbedding('test')).rejects.toThrow('OPENAI_API_KEY not configured');
     });
   });
 });

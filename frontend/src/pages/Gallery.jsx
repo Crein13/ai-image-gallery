@@ -7,7 +7,7 @@ import { imageService, healthService } from '../services/api';
 
 export default function Gallery() {
   const [images, setImages] = useState([]);
-  const [allImages, setAllImages] = useState([]); // Store all images for color extraction
+  const [allImages, setAllImages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -15,23 +15,19 @@ export default function Gallery() {
   const [availableColors, setAvailableColors] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [totalImages, setTotalImages] = useState(0);
-  const [activeFilter, setActiveFilter] = useState(null); // 'search', 'similar', 'color'
+  const [activeFilter, setActiveFilter] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
 
   useEffect(() => {
-    // Load images when component mounts
     loadImages();
-    // Load available colors
     loadAvailableColors();
   }, []);
 
-  // Poll for processing status updates
   useEffect(() => {
     let pollInterval;
 
-    // Check if we have any images that are still processing (from both displayed and all images)
     const hasProcessingImages = [...images, ...allImages].some(image =>
       image.metadata?.ai_processing_status === 'pending' ||
       image.metadata?.ai_processing_status === 'processing'
@@ -39,7 +35,6 @@ export default function Gallery() {
 
     if (hasProcessingImages) {
       setIsPolling(true);
-      // Poll every 3 seconds for processing updates
       pollInterval = setInterval(async () => {
         try {
           if (!isSearching) {

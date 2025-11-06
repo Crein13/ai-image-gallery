@@ -63,15 +63,23 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
-      {/* Header */}
-      <div className="bg-white shadow-sm py-3 px-4">
-        <div className="flex justify-center">
-          <div className="w-full px-4">
-            <h1 className="text-2xl font-bold text-blue-600">AI Image Gallery</h1>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Header - Match homepage navbar style */}
+      <nav className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-center">
+            <div className="w-full max-w-6xl flex justify-between items-center h-16">
+              {/* Logo */}
+              <div>
+                <h1 className="text-xl font-bold text-blue-600">AI Image Gallery</h1>
+              </div>
+
+              {/* Empty space to maintain navbar structure */}
+              <div></div>
+            </div>
           </div>
         </div>
-      </div>
+      </nav>
 
       {/* Main Content */}
       <div className="flex-1 flex items-center justify-center px-4 py-8">

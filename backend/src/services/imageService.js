@@ -5,13 +5,10 @@ import { extractDominantColors } from '../utils/colorExtractor.js';
 import { processImageAI } from './aiProcessingService.js';
 
 /**
- * Get a single image by ID with metadata
- * Enforces ownership - only returns image if it belongs to the requesting user
- *
  * @param {Object} params
- * @param {number} params.imageId - ID of the image to retrieve
- * @param {string} params.userId - ID of the requesting user
- * @returns {Promise<Object|null>} Image with metadata, or null if not found/not owned
+ * @param {number} params.imageId
+ * @param {string} params.userId
+ * @returns {Promise<Object|null>}
  */
 export async function getImageById({ imageId, userId }) {
   const image = await prisma.images.findFirst({
@@ -36,7 +33,6 @@ export async function getImageById({ imageId, userId }) {
     return null;
   }
 
-  // Format metadata same way as listImages
   const md = Array.isArray(image.image_metadata) ? image.image_metadata[0] : null;
 
   return {
@@ -61,9 +57,6 @@ export async function getImageById({ imageId, userId }) {
 }
 
 /**
- * List images for a user with pagination and basic sorting
- * No business logic in routes: called by routes/images.js
- *
  * @param {Object} params
  * @param {string} params.userId
  * @param {number} [params.limit=20]
@@ -73,7 +66,6 @@ export async function getImageById({ imageId, userId }) {
  */
 export async function listImages({ userId, limit = 20, offset = 0, sort = 'newest' }) {
   try {
-    // Normalize params
     const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
     const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
     const orderBy = sort === 'oldest' ? { uploaded_at: 'asc' } : { uploaded_at: 'desc' };
@@ -124,7 +116,6 @@ export async function listImages({ userId, limit = 20, offset = 0, sort = 'newes
     };
   });
 
-    // Compute pagination helpers
     const hasNext = safeOffset + safeLimit < total;
     const hasPrev = safeOffset > 0;
     const nextOffset = hasNext ? safeOffset + safeLimit : null;
@@ -141,7 +132,6 @@ export async function listImages({ userId, limit = 20, offset = 0, sort = 'newes
       prevOffset,
     };
   } catch (error) {
-    // Return empty result on error instead of throwing
     return {
       items: [],
       total: 0,
@@ -156,19 +146,15 @@ export async function listImages({ userId, limit = 20, offset = 0, sort = 'newes
 }
 
 /**
- * Search images by text (tags/description) and/or color
- * Enforces user ownership
- * Uses Prisma queries for exact and partial matching
- *
  * @param {Object} params
- * @param {string} params.userId - User ID for ownership enforcement
- * @param {string} [params.query] - Text to search in tags or description
- * @param {string} [params.color] - Hex color to filter by (e.g., '#ff0000')
- * @param {boolean} [params.dominantOnly=false] - Only search dominant color (not colors array)
- * @param {number} [params.limit=20] - Max results per page
- * @param {number} [params.offset=0] - Pagination offset
- * @param {('newest'|'oldest')} [params.sort='newest'] - Sort order
- * @returns {Promise<{items: Array, total: number, limit: number, offset: number, hasNext: boolean, hasPrev: boolean, nextOffset: number|null, prevOffset: number|null}>}
+ * @param {string} params.userId
+ * @param {string} [params.query]
+ * @param {string} [params.color]
+ * @param {boolean} [params.dominantOnly=false]
+ * @param {number} [params.limit=20]
+ * @param {number} [params.offset=0]
+ * @param {('newest'|'oldest')} [params.sort='newest']
+ * @returns {Promise<Object>}
  */
 export async function searchImages({
   userId,
@@ -179,7 +165,6 @@ export async function searchImages({
   offset = 0,
   sort = 'newest',
 }) {
-  // Validate and normalize color if provided
   if (color) {
     const colorRegex = /^#[0-9a-f]{6}$/i;
     if (!colorRegex.test(color)) {
@@ -188,28 +173,19 @@ export async function searchImages({
     color = color.toLowerCase();
   }
 
-  // Normalize params
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
   const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
-
-  // Use Prisma queries for all searches
   const orderBy = sort === 'oldest' ? { uploaded_at: 'asc' } : { uploaded_at: 'desc' };
 
-  // Build where clause
   const where = {
     user_id: userId,
   };
 
-  // Build metadata filters
   const metadataFilters = [];
-
-  // Text search (query in tags OR description) - case-insensitive matching
   if (query && query.trim()) {
     metadataFilters.push({
       OR: [
-        // Exact match in tags array
         { tags: { has: query.trim() } },
-        // Case-insensitive contains in description
         {
           description: {
             contains: query.trim(),
@@ -220,29 +196,22 @@ export async function searchImages({
     });
   }
 
-  // Color filter
   if (color) {
     if (dominantOnly) {
-      // Only search dominant_color
       metadataFilters.push({
         dominant_color: color,
       });
     } else {
-      // Only search colors array
       metadataFilters.push({
         colors: { has: color },
       });
     }
   }
-
-  // Apply metadata filters if any
   if (metadataFilters.length > 0) {
     where.image_metadata = {
       some: metadataFilters.length === 1 ? metadataFilters[0] : { AND: metadataFilters },
     };
   }
-
-  // Execute query with count
   const [total, rows] = await Promise.all([
     prisma.images.count({ where }),
     prisma.images.findMany({
@@ -264,7 +233,6 @@ export async function searchImages({
     }),
   ]);
 
-  // Format items (same as listImages)
   const items = rows.map((img) => {
     const md = Array.isArray(img.image_metadata) ? img.image_metadata[0] : null;
     return {
@@ -288,7 +256,6 @@ export async function searchImages({
     };
   });
 
-  // Compute pagination helpers (same as listImages)
   const hasNext = safeOffset + safeLimit < total;
   const hasPrev = safeOffset > 0;
   const nextOffset = hasNext ? safeOffset + safeLimit : null;
@@ -307,13 +274,11 @@ export async function searchImages({
 }
 
 /**
- * Check for existing filename and generate unique version if needed
- * @param {string} originalName - Original filename
- * @param {string} userId - User ID for ownership
- * @returns {Promise<string>} Unique filename (with number suffix if needed)
+ * @param {string} originalName
+ * @param {string} userId
+ * @returns {Promise<string>}
  */
 async function getUniqueFilename(originalName, userId) {
-  // Check if filename already exists for this user
   const existingImage = await prisma.images.findFirst({
     where: {
       user_id: userId,
@@ -321,17 +286,13 @@ async function getUniqueFilename(originalName, userId) {
     },
   });
 
-  // If no conflict, return original name
   if (!existingImage) {
     return originalName;
   }
 
-  // Extract name and extension
   const lastDotIndex = originalName.lastIndexOf('.');
   const name = lastDotIndex > 0 ? originalName.substring(0, lastDotIndex) : originalName;
   const extension = lastDotIndex > 0 ? originalName.substring(lastDotIndex) : '';
-
-  // Try incrementing numbers until we find an available filename
   let counter = 1;
   let newFilename;
   let exists = true;
@@ -356,27 +317,23 @@ async function getUniqueFilename(originalName, userId) {
 }
 
 /**
- * Upload an image file to Supabase Storage and save metadata to database
- * @param {Object} file - Multer file object with buffer, originalname, mimetype, size
- * @param {string} userId - User ID for ownership
- * @returns {Promise<Object>} Created image record from database
+ * @param {Object} file
+ * @param {string} userId
+ * @returns {Promise<Object>}
  */
 export async function uploadImage(file, userId) {
-  // Validate file type (must be JPEG, PNG, or WebP)
   if (!file.mimetype || !/^image\/(jpeg|png|webp)$/i.test(file.mimetype)) {
     const err = new Error('Only JPEG, PNG, and WebP images are allowed');
     err.status = 400;
     throw err;
   }
 
-  // Validate file size (max 10MB)
   if (file.size > 10 * 1024 * 1024) {
     const err = new Error('File size must be under 10MB');
     err.status = 400;
     throw err;
   }
 
-  // Validate required fields
   if (!file.buffer || !file.originalname) {
     const err = new Error('Only image files are allowed');
     err.status = 400;
@@ -384,16 +341,13 @@ export async function uploadImage(file, userId) {
   }
 
   try {
-    // Check for duplicate filename and get unique version if needed
     const uniqueFilename = await getUniqueFilename(file.originalname, userId);
 
-    // Generate storage filenames
     const timestamp = Date.now();
     const sanitizedName = uniqueFilename.replace(/[^a-zA-Z0-9.-]/g, '_');
     const originalFilename = `originals/${userId}/original-${timestamp}-${sanitizedName}`;
     const thumbFilename = `thumbnails/${userId}/thumb-${timestamp}-${sanitizedName}`;
 
-    // Extract dominant colors (synchronous during upload)
     let colors = [];
     let dominantColor = null;
     try {
@@ -402,8 +356,6 @@ export async function uploadImage(file, userId) {
     } catch (error) {
       // Continue with upload even if color extraction fails
     }
-
-    // Generate thumbnail using imageProcessor utility
     let thumbnailBuffer;
     try {
       const result = await generateThumbnail(file.buffer, 300);
@@ -413,8 +365,6 @@ export async function uploadImage(file, userId) {
       err.status = 500;
       throw err;
     }
-
-    // Upload original image to Supabase Storage
     const { data: originalData, error: originalError } = await supabase.storage
       .from(process.env.SUPABASE_BUCKET)
       .upload(originalFilename, file.buffer, {
@@ -427,7 +377,7 @@ export async function uploadImage(file, userId) {
       throw err;
     }
 
-    // Upload thumbnail to Supabase Storage
+
     const { data: thumbData, error: thumbError } = await supabase.storage
       .from(process.env.SUPABASE_BUCKET)
       .upload(thumbFilename, thumbnailBuffer, {
@@ -440,7 +390,6 @@ export async function uploadImage(file, userId) {
       throw err;
     }
 
-    // Save image metadata to database
     try {
       const imageRecord = await prisma.images.create({
         data: {
@@ -453,7 +402,7 @@ export async function uploadImage(file, userId) {
         },
       });
 
-      // Create image_metadata record with initial color data
+
       await prisma.image_metadata.create({
         data: {
           image_id: imageRecord.id,
@@ -464,17 +413,14 @@ export async function uploadImage(file, userId) {
         },
       });
 
-      // Trigger AI processing in background (fire-and-forget)
       processImageAI(imageRecord.id, userId, file.buffer).catch(() => {
         // AI processing failed - will be retried later
       });
-
-      // Return image record with color data
       return {
         ...imageRecord,
         colors,
         dominant_color: dominantColor,
-        ai_processing_status: 'pending', // Will be updated by AI processing
+        ai_processing_status: 'pending',
       };
     } catch (error) {
       const err = new Error('Failed to save image record');
@@ -482,11 +428,9 @@ export async function uploadImage(file, userId) {
       throw err;
     }
   } catch (error) {
-    // Re-throw if already has status
     if (error.status) {
       throw error;
     }
-    // Wrap unexpected errors
     const err = new Error('Image upload failed');
     err.status = 500;
     throw err;
@@ -494,17 +438,13 @@ export async function uploadImage(file, userId) {
 }
 
 /**
- * Find images similar to a given image based on tag/color overlap
- * Simple similarity using shared tags and colors (per TODO requirements)
- *
  * @param {Object} params
- * @param {number} params.imageId - Source image ID
- * @param {string} params.userId - User ID for ownership validation
- * @param {number} [params.limit=20] - Maximum number of results
- * @returns {Promise<Object>} Similar images with pagination metadata
+ * @param {number} params.imageId
+ * @param {string} params.userId
+ * @param {number} [params.limit=20]
+ * @returns {Promise<Object>}
  */
 export async function findSimilarToImage({ imageId, userId, limit = 20 }) {
-  // Get source image with metadata
   const sourceImage = await prisma.images.findFirst({
     where: {
       id: imageId,
@@ -521,7 +461,6 @@ export async function findSimilarToImage({ imageId, userId, limit = 20 }) {
     throw err;
   }
 
-  // Extract metadata
   const metadata = Array.isArray(sourceImage.image_metadata)
     ? sourceImage.image_metadata[0]
     : null;
@@ -534,8 +473,6 @@ export async function findSimilarToImage({ imageId, userId, limit = 20 }) {
 
   const sourceTags = metadata.tags || [];
   const sourceColors = metadata.colors || [];
-
-  // Build OR conditions for tag/color overlap
   const orConditions = [];
 
   if (sourceTags.length > 0) {
@@ -558,7 +495,6 @@ export async function findSimilarToImage({ imageId, userId, limit = 20 }) {
     });
   }
 
-  // If no tags or colors, return empty results
   if (orConditions.length === 0) {
     return {
       items: [],
@@ -567,11 +503,10 @@ export async function findSimilarToImage({ imageId, userId, limit = 20 }) {
     };
   }
 
-  // Find similar images
   const similarImages = await prisma.images.findMany({
     where: {
       user_id: userId,
-      id: { not: imageId }, // Exclude source image
+      id: { not: imageId },
       OR: orConditions,
     },
     include: {
@@ -591,7 +526,6 @@ export async function findSimilarToImage({ imageId, userId, limit = 20 }) {
     },
   });
 
-  // Format results (same format as other functions)
   const formattedImages = similarImages.map((image) => {
     const md = Array.isArray(image.image_metadata) ? image.image_metadata[0] : null;
 
@@ -624,15 +558,13 @@ export async function findSimilarToImage({ imageId, userId, limit = 20 }) {
 }
 
 /**
- * Get distinct colors from user's images
  * @param {Object} params
- * @param {string} params.userId - ID of the user
- * @param {number|null} [params.limit=null] - Maximum number of colors to return, null for no limit
- * @returns {Promise<Object>} Object with colors array and total count
+ * @param {string} params.userId
+ * @param {number|null} [params.limit=null]
+ * @returns {Promise<Object>}
  */
 export async function getDistinctColors({ userId, limit = null }) {
   try {
-    // Get all unique colors from user's images
     const result = await prisma.image_metadata.findMany({
       where: {
         user_id: userId,
@@ -648,28 +580,24 @@ export async function getDistinctColors({ userId, limit = null }) {
       }
     });
 
-    // Collect all unique colors
     const colorSet = new Set();
 
     if (result && Array.isArray(result)) {
       result.forEach(metadata => {
-        // Add colors from the colors array
         if (metadata.colors && Array.isArray(metadata.colors)) {
           metadata.colors.forEach(color => {
-            if (color && typeof color === 'string' && color.match(/^#[0-9A-Fa-f]{6}$/)) { // Valid hex color
+            if (color && typeof color === 'string' && color.match(/^#[0-9A-Fa-f]{6}$/)) {
               colorSet.add(color.toLowerCase());
             }
           });
         }
 
-        // Add dominant color
         if (metadata.dominant_color && typeof metadata.dominant_color === 'string' && metadata.dominant_color.match(/^#[0-9A-Fa-f]{6}$/)) {
           colorSet.add(metadata.dominant_color.toLowerCase());
         }
       });
     }
 
-    // Convert to array
     const colors = Array.from(colorSet);
 
     return {
@@ -677,7 +605,6 @@ export async function getDistinctColors({ userId, limit = null }) {
       total: colors.length
     };
   } catch (error) {
-    // Return empty result on error instead of throwing
     return {
       colors: [],
       total: 0
@@ -686,14 +613,12 @@ export async function getDistinctColors({ userId, limit = null }) {
 }
 
 /**
- * Retry AI processing for an image
  * @param {Object} params
- * @param {number} params.imageId - ID of the image
- * @param {string} params.userId - ID of the user
- * @returns {Promise<Object>} Processing result
+ * @param {number} params.imageId
+ * @param {string} params.userId
+ * @returns {Promise<Object>}
  */
 export async function retryAIProcessing({ imageId, userId }) {
-  // Check if image exists and belongs to user
   const image = await prisma.images.findFirst({
     where: {
       id: imageId,
@@ -707,7 +632,6 @@ export async function retryAIProcessing({ imageId, userId }) {
     throw error;
   }
 
-  // Check metadata status
   const metadata = await prisma.image_metadata.findFirst({
     where: { image_id: imageId },
   });
@@ -724,7 +648,6 @@ export async function retryAIProcessing({ imageId, userId }) {
     throw error;
   }
 
-  // Download original image from storage
   const { data: fileData, error: downloadError } = await supabase.storage
     .from(process.env.SUPABASE_BUCKET)
     .download(image.original_path);
@@ -735,11 +658,9 @@ export async function retryAIProcessing({ imageId, userId }) {
     throw error;
   }
 
-  // Convert blob to buffer
   const arrayBuffer = await fileData.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  // Trigger AI processing (fire-and-forget)
   processImageAI(image.id, userId, buffer).catch(() => {
     // AI processing retry failed - will be handled appropriately
   });
